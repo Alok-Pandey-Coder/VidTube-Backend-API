@@ -132,7 +132,15 @@ Start production server
 npm start
 ```
 
-Server runs on
+# 🌐 Server
+
+### Production
+
+```
+https://vidtube-backend-api-production.up.railway.app
+```
+
+### Local Development
 
 ```
 http://localhost:8000
@@ -142,8 +150,22 @@ http://localhost:8000
 
 # 📡 Base API URL
 
+### Production
+
 ```
-/api/v1
+https://vidtube-backend-api-production.up.railway.app/api/v1
+```
+
+Example
+
+```
+https://vidtube-backend-api-production.up.railway.app/api/v1/users/register
+```
+
+### Local Development
+
+```
+http://localhost:8000/api/v1
 ```
 
 Example
@@ -154,23 +176,12 @@ http://localhost:8000/api/v1/users/register
 
 ---
 
-# 📬 Postman API Documentation
+# 📬 API Documentation (Postman)
 
-Full API documentation is available on Postman.
+You can explore and test all API endpoints using the Postman collection.
 
-View documentation:
-
-```
-https://documenter.getpostman.com/view/YOUR_POSTMAN_DOC_ID
-```
-
----
-
-# 🚀 Run API in Postman
-
-Import the API collection directly into Postman.
-
-[![Run in Postman](https://run.pstmn.io/button.svg)](https://app.getpostman.com/run-collection/YOUR_COLLECTION_ID)
+🔗 Postman Collection  
+https://shivam-4520593.postman.co/workspace/shivam's-Workspace~ddb3db7f-7da8-4950-8982-48fda195d56d/collection/46226297-18767b71-4533-4b12-a6a4-6a6db5c6ad64?action=share&creator=46226297
 
 ---
 
@@ -188,8 +199,10 @@ Example response
 
 ```json
 {
-  "status": "ok",
-  "message": "Server is running"
+    "statusCode": 200,
+    "data": "OK",
+    "message": "Health check passed",
+    "success": true
 }
 ```
 
