@@ -1,10 +1,11 @@
 import mongoose, { isValidObjectId } from "mongoose";
+import path  from "path"
 import { Video } from "../models/video.models.js";
 import { User } from "../models/user.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { deleteFromCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
@@ -96,7 +97,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
 });
 
 const publishAVideo = asyncHandler(async (req, res) => {
-  const { title, description, thumbnail } = req.body;
+  const { title, description} = req.body;
 
   if (!title) {
     throw new ApiError(400, "Title is required");
@@ -106,22 +107,25 @@ const publishAVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Description is required");
   }
 
-  if (!thumbnail) {
-    throw new ApiError(400, "thumbnail is required");
-  }
-
-
-  const videoLocalPath = req.files?.video?.[0]?.path;
+  const thumbnailLocalPath = req?.files?.thumbnail[0]?.path;
+  const videoLocalPath = req.files?.videoFile[0]?.path;
 
   if (!videoLocalPath) {
     throw new ApiError(400, "Video file is required");
   }
 
+  if (!thumbnailLocalPath) {
+    throw new ApiError(400, "thumbnail file is required");
+  }
+
   let uploadedVideo;
+  let uploadedThumbnail;
 
   try {
-    uploadedVideo = await uploadOnCloudinary(videoLocalPath, "video");
-
+    uploadedVideo = await uploadOnCloudinary(path.resolve(videoLocalPath));
+    console.log("Video file uploaded succesfully", uploadedVideo)
+    uploadedThumbnail = await uploadOnCloudinary(path.resolve(thumbnailLocalPath));
+    console.log("thumbnail file uploaded succesfully", uploadedThumbnail)
   } catch (error) {
     throw new ApiError(500, "Cloudinary upload failed");
   }
@@ -130,19 +134,12 @@ const publishAVideo = asyncHandler(async (req, res) => {
     const video = await Video.create({
       title,
       description,
-
       videoFile: {
-        url: uploadedVideo.secure_url,
+        url: uploadedVideo.url,
         public_id: uploadedVideo.public_id
       },
-
-      thumbnail: {
-        url: uploadedThumbnail.secure_url,
-        public_id: uploadedThumbnail.public_id
-      },
-
+      thumbnail: uploadedThumbnail?.url,
       duration: uploadedVideo.duration,
-
       owner: req.user._id
     });
 
@@ -155,10 +152,11 @@ const publishAVideo = asyncHandler(async (req, res) => {
     // cleanup cloudinary
     await Promise.all([
       uploadedVideo?.public_id &&
-        deleteFromCloudinary(uploadedVideo.public_id, "video"),
+        deleteFromCloudinary(uploadedVideo.public_id),
+      uploadedThumbnail?.public_id && deleteFromCloudinary(uploadedThumbnail.public_id)
     ]);
 
-    throw new ApiError(500, "Video publish failed");
+    throw new ApiError(500, "Video or thumbnail publish failed");
   }
 });
 
@@ -186,7 +184,8 @@ const getVideoById = asyncHandler(async (req, res) => {
 
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
-  const {title, description, thumbnail} = req.body;
+  const {title, description} = req.body;
+  const thumbnailLocalPath = req?.file?.path
   //TODO: update video details like title, description, thumbnail
 
   if(!videoId) {
@@ -197,6 +196,16 @@ const updateVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Video id is invalid")
   }
 
+  if(!thumbnailLocalPath) {
+    throw new ApiError(400, "Thumbnail file is missing")
+  }
+
+  const thumbnail = await uploadOnCloudinary(thumbnailLocalPath)
+
+  if(!thumbnail) {
+    throw new ApiError(400, "Upload on cludinary failed")
+  }
+
   const updateObj = {};
   if(title) {
     updateObj.title = title;
@@ -204,8 +213,8 @@ const updateVideo = asyncHandler(async (req, res) => {
   if(description) {
     updateObj.description = description;
   }
-  if(thumbnail) {
-    updateObj.thumbnail = thumbnail;
+  if(thumbnail.url) {
+    updateObj.thumbnail = thumbnail.url;
   }
 
   if (Object.keys(updateObj).length === 0) {
@@ -282,7 +291,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
       }
     ],
     { new: true,
-      runValidators: false
+      updatePipeline: true
      }
   );
 
