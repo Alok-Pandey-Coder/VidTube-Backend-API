@@ -31,7 +31,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
   }
 
   const sortStage = {
-    [sortBy]: sortType === "asc" ? 1 : -1,
+    [sortBy || "createdAt"]: sortType === "asc" ? 1 : -1,
   };
 
   const videosAggregation = await Video.aggregate([

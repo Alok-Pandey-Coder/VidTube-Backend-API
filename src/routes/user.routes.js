@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { registerUser, logoutUser, loginUser, refreshAccessToken, changeCurrentPassword, getCurrentUser, getUserChannelProfile, updateAccountDetails, updateAvatar, updateCoverImage, getWatchHistory } from "../controllers/user.controllers.js";
 import {upload} from "../middlewares/multer.middlewares.js"
-import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { verifyJWT, optionalVerifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router()
 
-router.route("/register").get(upload.fields([
+router.route("/register").post(upload.fields([
   {
     name: "avatar",
     maxCount: 1
@@ -23,7 +23,7 @@ router.route("/refresh-token").post(refreshAccessToken)
 router.route("/logout").post(verifyJWT, logoutUser)
 router.route("/change-password").post(verifyJWT, changeCurrentPassword)
 router.route("/current-user").get(verifyJWT, getCurrentUser)
-router.route("/c/:username").get(verifyJWT, getUserChannelProfile)
+router.route("/c/:username").get(optionalVerifyJWT, getUserChannelProfile)
 router.route("/update-account").patch(verifyJWT, updateAccountDetails)
 router.route("/avatar").patch(verifyJWT, upload.single("avatar"),updateAvatar)
 router.route("/cover-image").patch(verifyJWT, upload.single("coverImage"),updateCoverImage)
