@@ -115,7 +115,12 @@ export default function WatchPage() {
     );
   }
 
-  const videoSourceUrl = video.videoFile?.url || video.videoFile;
+  // CHANGED: API_ORIGIN hata diya, relative /media URL (Vite proxy se backend tak jayega)
+  const legacyUrl = video.videoFile?.url || video.videoFile;
+  const videoSourceUrl = video.hlsKey
+    ? `/media/${video.hlsKey}`
+    : typeof legacyUrl === 'string' ? legacyUrl : null;
+
   const owner = video.owner || {};
   const isOwner = user && (owner._id === user._id || owner === user._id);
 

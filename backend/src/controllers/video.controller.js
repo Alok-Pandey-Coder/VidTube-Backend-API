@@ -6,6 +6,8 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { deleteFromCloudinary, uploadOnCloudinary } from "../utils/cloudinary.js";
+import { saveOriginal, deleteFile } from "../../services/storage.js";
+import { videoQueue } from "../../queues/videoQueue.js";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
@@ -118,30 +120,44 @@ const publishAVideo = asyncHandler(async (req, res) => {
     throw new ApiError(400, "thumbnail file is required");
   }
 
-  let uploadedVideo;
+  const videoId = new mongoose.Types.ObjectId();
+  const storageKey = `videos/${videoId}/original.mp4`;
+
   let uploadedThumbnail;
 
   try {
-    uploadedVideo = await uploadOnCloudinary(path.resolve(videoLocalPath));
-    console.log("Video file uploaded succesfully", uploadedVideo)
+    await saveOriginal(path.resolve(videoLocalPath), storageKey)
+    console.log("Video saved in storage:", storageKey);
     uploadedThumbnail = await uploadOnCloudinary(path.resolve(thumbnailLocalPath));
     console.log("thumbnail file uploaded succesfully", uploadedThumbnail)
   } catch (error) {
-    throw new ApiError(500, "Cloudinary upload failed");
+    await deleteFile(storageKey).catch(() => {});
+    throw new ApiError(500, "Video/thumbnail upload failed");
   }
 
   try {
     const video = await Video.create({
+      _id: videoId,                                                  // CHANGE 3
       title,
       description,
-      videoFile: {
-        url: uploadedVideo.url,
-        public_id: uploadedVideo.public_id
-      },
+      storageKey,                                                    // CHANGE 3
+      storageProvider: "local",                                      // CHANGE 3
+      status: "uploaded",                                            // CHANGE 3
       thumbnail: uploadedThumbnail?.url,
-      duration: uploadedVideo.duration,
-      owner: req.user._id
+      owner: req.user._id,
     });
+
+    //adding the work in process queue
+    try {
+      await videoQueue.add(
+        "process",
+        { videoId: video._id.toString() },
+        { jobId: video._id.toString() }
+      );
+    } catch (queueErr) {
+      console.error("Queue add failed:", queueErr.message);
+    }
+
 
     return res.status(201).json(
       new ApiResponse(201, video, "Video published successfully")
@@ -151,8 +167,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
 
     // cleanup cloudinary
     await Promise.all([
-      uploadedVideo?.public_id &&
-        deleteFromCloudinary(uploadedVideo.public_id),
+       deleteFile(storageKey).catch(() => {}),
       uploadedThumbnail?.public_id && deleteFromCloudinary(uploadedThumbnail.public_id)
     ]);
 

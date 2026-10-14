@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors"
 import cookieParser from "cookie-parser";
+import path from "path"
 
 const app = express();
 
@@ -23,6 +24,8 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
+app.use("/media", express.static(path.resolve("storage")))
 
 import healthcheckRouter from "./routes/healthcheck.routes.js"
 import userRouter from "./routes/user.routes.js"

@@ -14,7 +14,12 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
-      }
+      },
+      '/media': {                          // NEW
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
     }
   }
 })

@@ -39,3 +39,7 @@ export async function saveHlsOutput(localDir, keyPrefix) {
   await fs.cp(localDir, dest, { recursive: true });
   return keyPrefix;
 }
+
+export async function deleteFile(key) {
+  await fs.rm(resolveKey(key), {force: true});
+}
