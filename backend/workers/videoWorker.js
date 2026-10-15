@@ -9,6 +9,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { getFilePath, saveHlsOutput } from '../services/storage.js';
 import { probeVideo, transcodeTOHls } from '../services/ffmpeg.js';
+import { invalidateVideo } from '../src/utils/cache.js';
 
 await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
 console.log('Worker: DB connected', mongoose.connection.name);
@@ -42,6 +43,8 @@ const worker = new Worker(
         duration,
         hlsKey: `${hlsPrefix}/master.m3u8`,
       });
+
+      await invalidateVideo(videoId);
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -60,5 +63,6 @@ worker.on('failed', async (job, err) => {
   console.log(err.stack);  
   if (job.attemptsMade >= job.opts.attempts) {
     await Video.findByIdAndUpdate(job.data.videoId, { status: 'failed' });
+    await invalidateVideo(job.data.videoId);
   }
 });
