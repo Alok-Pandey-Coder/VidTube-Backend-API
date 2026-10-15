@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import path from "path"
 
 const app = express();
+app.set("trust proxy", 1);  
 
 app.use(express.json({limit: "16kb"}));
 app.use(express.urlencoded({extended: true, limit: "16kb"}));
@@ -25,7 +26,8 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.use("/media", express.static(path.resolve("storage")))
+
+app.use("/media", express.static(path.resolve("storage"))); 
 
 import healthcheckRouter from "./routes/healthcheck.routes.js"
 import userRouter from "./routes/user.routes.js"

@@ -53,9 +53,9 @@ const getUserTweets = asyncHandler(async (req, res) => {
         }
     ])
 
-    if(!userTweets || userTweets.length === 0) {
-        throw new ApiError(404, "Tweet does not found ")
-    }
+    // if(!userTweets || userTweets.length === 0) {
+    //     throw new ApiError(404, "Tweet does not found ")
+    // }
 
     return res.status(200).json(new ApiResponse(200, userTweets, "User tweets fteched successfully"));
 
