@@ -11,38 +11,63 @@ import { videoQueue } from '../../queues/videoQueue.js';
 import { connection } from '../../config/redis.js';
 import { cached, invalidateVideo } from '../utils/cache.js';
 
+//Helper function ------
+const SORTABLE = ['createdAt', 'views', 'duration'];
+
+const encodeCursor = (value, id) => {
+  Buffer.from(JSON.stringify({ v: value, id })).toString('base64url');
+};
+
+const decodeCursor = (cursor) => {
+  try {
+    return JSON.parse(Buffer.from(cursor, 'base64url').toString());
+  } catch (error) {
+    return null;
+  }
+};
 const getAllVideos = asyncHandler(async (req, res) => {
-  let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+  let { cursor, limit = 12, query, sortBy, sortType, userId } = req.query;
 
-  page = parseInt(page);
-  limit = parseInt(limit);
+  limit = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
+  const sortField = SORTABLE.includes(sortBy) ? sortBy : 'createdAt';
+  const dir = sortType == 'asc' ? 1 : -1;
 
-  const skip = (page - 1) * limit;
-
-  const matchStage = {
-    isPublished: true,
-  };
+  const filters = [
+    { isPublished: true },
+    { status: { $nin: ['uploaded', 'processing', 'failed'] } },
+  ];
 
   if (query) {
-    matchStage.$or = [
-      { title: { $regex: query, $options: 'i' } },
-      { description: { $regex: query, $options: 'i' } },
-    ];
+    filters.push({
+      $or: [
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+      ],
+    });
   }
 
   if (userId) {
-    matchStage.owner = new mongoose.Types.ObjectId(userId);
+    filters.push({ owner: new mongoose.Types.ObjectId(userId) });
   }
 
-  const sortStage = {
-    [sortBy || 'createdAt']: sortType === 'asc' ? 1 : -1,
-  };
+  if (cursor) {
+    const c = decodeCursor(cursor);
+    if (!c) throw new ApiError(400, 'invalid cursor');
+
+    const v = sortField === 'createdAt' ? new Date(c.v) : c.v;
+    const id = new mongoose.Types.ObjectId(c.id);
+    const op = dir === -1 ? '$lt' : '$gt';
+
+    filters.push({
+      $or: [{ [sortField]: { [op]: v } }, { [sortField]: v, _id: { [op]: id } }],
+    });
+  }
 
   const runAggregation = async () => {
-    const result = await Video.aggregate([
-      {
-        $match: matchStage,
-      },
+    const docs = await Video.aggregate([
+      { $match: { $and: filters } },
+      { $sort: { [sortField]: dir, _id: dir } },
+      { $limit: limit + 1 },
       {
         $lookup: {
           from: 'users',
@@ -51,9 +76,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
           as: 'owner',
         },
       },
-      {
-        $unwind: '$owner',
-      },
+      { $unwind: '$owner' },
       {
         $project: {
           title: 1,
@@ -70,21 +93,14 @@ const getAllVideos = asyncHandler(async (req, res) => {
           },
         },
       },
-      {
-        $sort: sortStage,
-      },
-      {
-        $facet: {
-          videos: [{ $skip: skip }, { $limit: limit }],
-          totalCount: [{ $count: 'count' }],
-        },
-      },
     ]);
 
-    return {
-      videos: result[0].videos,
-      totalVideos: result[0].totalCount[0]?.count || 0,
-    };
+    const hasMore = docs.length > limit;
+    const videos = hasMore ? docs.slice(0, limit) : docs;
+    const last = videos[videos.length - 1];
+    const nextCursor = hasMore && last ? encodeCursor(last[sortField] ?? 0, last._id) : null;
+
+    return { videos, nextCursor, hasMore };
   };
 
   let data;
@@ -92,25 +108,22 @@ const getAllVideos = asyncHandler(async (req, res) => {
     data = await runAggregation();
   } else {
     const ver = (await connection.get('feed:ver')) || '0';
-    const key = `feed:${ver}:${JSON.stringify({ page, limit, sortBy, sortType, userId })}`;
+    const key = `feed:${ver}:${JSON.stringify({ cursor, limit, sortField, dir, userId })}`;
     data = await cached(key, 60, runAggregation);
   }
-
-  const { videos, totalVideos } = data;
 
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        data: videos,
+        data: data.videos,
         pagination: {
-          totalVideos,
-          currentPage: page,
-          totalPages: Math.ceil(totalVideos / limit),
+          nextCursor: data.nextCursor,
+          hasMore: data.hasMore,
           limit,
         },
       },
-      ' All videos are fetched',
+      'All videos are fetched',
     ),
   );
 });
