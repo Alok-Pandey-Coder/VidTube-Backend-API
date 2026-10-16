@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2, Film, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { videoApi } from '../api/client';
 import VideoCard from '../components/VideoCard';
+
+const PAGE_SIZE = 3;
 
 const CATEGORIES = ['All', 'Coding', 'Web Dev', 'Node.js', 'React', 'MongoDB', 'Podcasts', 'Music', 'Tech News'];
 
@@ -15,32 +17,78 @@ export default function HomePage({ onOpenUpload }) {
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState('createdAt');
 
-  const fetchVideos = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const effectiveQuery = activeCategory !== 'All' ? activeCategory : query;
-      const res = await videoApi.getAllVideos({
-        query: effectiveQuery || undefined,
-        sortBy,
-        sortType: 'desc',
-        limit: 24,
-      });
+  const [loadingMore, setLoadingMore] = useState(false);
+const [nextCursor, setNextCursor] = useState(null);
+const requestIdRef = useRef(0);
+const sentinelRef = useRef(null);
 
-      // Backend returns ApiResponse(200, { data: videos, pagination }, "All videos are fetched")
-      const list = res.data?.data || res.data || [];
-      setVideos(list);
-    } catch (err) {
-      console.error('Failed to load videos:', err);
-      setError(err.response?.data?.message || 'Failed to load videos from the server.');
-    } finally {
-      setLoading(false);
-    }
+const buildParams = (cursor) => {
+  const effectiveQuery = activeCategory !== 'All' ? activeCategory : query;
+  return {
+    query: effectiveQuery || undefined,
+    sortBy,
+    sortType: 'desc',
+    limit: PAGE_SIZE,
+    cursor: cursor || undefined,
   };
+};
 
-  useEffect(() => {
-    fetchVideos();
-  }, [query, activeCategory, sortBy]);
+const fetchVideos = async () => {
+  const reqId = ++requestIdRef.current;
+  try {
+    setLoading(true);
+    setError(null);
+    const res = await videoApi.getAllVideos(buildParams());
+    if (reqId !== requestIdRef.current) return;   // purana request, ignore
+    const payload = res.data;
+    setVideos(payload?.data || []);
+    setNextCursor(payload?.pagination?.nextCursor || null);
+  } catch (err) {
+    if (reqId !== requestIdRef.current) return;
+    console.error('Failed to load videos:', err);
+    setError(err.response?.data?.message || 'Failed to load videos from the server.');
+  } finally {
+    if (reqId === requestIdRef.current) setLoading(false);
+  }
+};
+
+const loadMore = useCallback(async () => {
+  if (!nextCursor || loadingMore || loading) return;
+  const reqId = requestIdRef.current;
+  try {
+    setLoadingMore(true);
+    const res = await videoApi.getAllVideos(buildParams(nextCursor));
+    if (reqId !== requestIdRef.current) return;
+    const payload = res.data;
+    setVideos((prev) => {
+      const seen = new Set(prev.map((v) => v._id));
+      const fresh = (payload?.data || []).filter((v) => !seen.has(v._id));
+      return [...prev, ...fresh];
+    });
+    setNextCursor(payload?.pagination?.nextCursor || null);
+  } catch (err) {
+    console.error('Failed to load more videos:', err);
+  } finally {
+    setLoadingMore(false);
+  }
+}, [nextCursor, loadingMore, loading, query, activeCategory, sortBy]);
+
+useEffect(() => {
+  fetchVideos();
+}, [query, activeCategory, sortBy]);
+
+useEffect(() => {
+  const el = sentinelRef.current;
+  if (!el) return;
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) loadMore();
+    },
+    { rootMargin: '400px' },
+  );
+  observer.observe(el);
+  return () => observer.disconnect();
+}, [loadMore, videos.length])
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -130,12 +178,26 @@ export default function HomePage({ onOpenUpload }) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8">
-          {videos.map((vid) => (
-            <VideoCard key={vid._id || vid.id} video={vid} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8">
+            {videos.map((vid) => (
+              <VideoCard key={vid._id || vid.id} video={vid} />
+            ))}
+          </div>
+
+          {loadingMore && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 animate-spin text-red-500" />
+            </div>
+          )}
+
+          {nextCursor && <div ref={sentinelRef} className="h-10" />}
+
+          {!nextCursor && videos.length > 0 && (
+            <p className="text-center text-xs text-zinc-600 py-6">You've reached the end</p>
+          )}
+        </>
       )}
     </div>
-  );
+  )
 }
