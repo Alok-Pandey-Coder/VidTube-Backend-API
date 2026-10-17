@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   ThumbsUp, 
@@ -29,6 +29,8 @@ export default function WatchPage() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const likeBusyRef = useRef(false);
+  const subBusyRef = useRef(false);
 
   useEffect(() => {
     const fetchVideoDetails = async () => {
@@ -58,33 +60,46 @@ export default function WatchPage() {
   }, [videoId]);
 
   const handleToggleLike = async () => {
-    if (!isAuthenticated) {
-      alert('Please sign in to like this video');
-      return;
-    }
-    try {
-      await likeApi.toggleVideoLike(videoId);
-      setIsLiked(!isLiked);
-    } catch (err) {
-      console.error('Like toggle failed', err);
-    }
-  };
+  if (!isAuthenticated) {
+    alert('Please sign in to like this video');
+    return;
+  }
+  if (likeBusyRef.current) return;       // double click guard
+  likeBusyRef.current = true;
 
-  const handleToggleSubscribe = async () => {
-    if (!isAuthenticated) {
-      alert('Please sign in to subscribe');
-      return;
-    }
-    const channelId = video?.owner?._id || video?.owner;
-    if (!channelId) return;
+  const prev = isLiked;
+  setIsLiked(!prev);                     // 1) UI turant badlo
+  try {
+    await likeApi.toggleVideoLike(videoId);   // 2) server ko batao
+  } catch (err) {
+    setIsLiked(prev);                    // 3) fail hua to wapas
+    console.error('Like toggle failed', err);
+  } finally {
+    likeBusyRef.current = false;
+  }
+};
 
-    try {
-      await subscriptionApi.toggleSubscription(channelId);
-      setIsSubscribed(!isSubscribed);
-    } catch (err) {
-      console.error('Subscription toggle failed', err);
-    }
-  };
+const handleToggleSubscribe = async () => {
+  if (!isAuthenticated) {
+    alert('Please sign in to subscribe');
+    return;
+  }
+  const channelId = video?.owner?._id || video?.owner;
+  if (!channelId) return;
+  if (subBusyRef.current) return;
+  subBusyRef.current = true;
+
+  const prev = isSubscribed;
+  setIsSubscribed(!prev);
+  try {
+    await subscriptionApi.toggleSubscription(channelId);
+  } catch (err) {
+    setIsSubscribed(prev);
+    console.error('Subscription toggle failed', err);
+  } finally {
+    subBusyRef.current = false;
+  }
+};
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
