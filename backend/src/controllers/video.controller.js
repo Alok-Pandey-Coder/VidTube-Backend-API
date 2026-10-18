@@ -10,6 +10,8 @@ import { saveOriginal, deleteFile } from '../../services/storage.js';
 import { videoQueue } from '../../queues/videoQueue.js';
 import { connection } from '../../config/redis.js';
 import { cached, invalidateVideo } from '../utils/cache.js';
+import { Like } from '../models/like.models.js';
+import { Subscription } from '../models/subscription.models.js';
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
@@ -224,7 +226,17 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Video is not found');
   }
 
-  return res.status(200).json(new ApiResponse(200, video, 'Video is fetched succesfully'));
+  const videoObjId = new mongoose.Types.ObjectId(videoId);
+  const ownerId = video.owner?._id
+  const userId = req.user?._id
+
+  const [likesCount, likeDoc, subDoc] = await Promise.all([
+    Like.countDocuments({target: videoObjId, onModel: 'Video'}),
+    userId ? Like.exists({target: videoObjId, likedBy: userId}) : null,
+    userId && ownerId ? Subscription.exists({subscriber: userId, channel: ownerId}): null
+  ])
+
+  return res.status(200).json(new ApiResponse(200, {...video, likesCount, isLiked: !!likeDoc, isSubscribed: !!subDoc}, 'Video is fetched succesfully'))
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
