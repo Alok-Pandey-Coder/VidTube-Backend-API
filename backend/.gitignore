@@ -1,5 +1,6 @@
 node_modules/
 .env
-frontend/node_modules/
-frontend/dist/
-src/storage/
+storage/
+uploads/
+public/temp/*
+!public/temp/.gitkeep

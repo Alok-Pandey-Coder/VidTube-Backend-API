@@ -60,4 +60,5 @@ const videoSchema = new Schema(
 
 videoSchema.index({ isPublished: 1, createdAt: -1, _id: -1 });
 
+
 export const Video = mongoose.model("Video", videoSchema)

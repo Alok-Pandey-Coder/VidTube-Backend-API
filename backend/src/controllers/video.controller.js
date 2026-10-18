@@ -12,6 +12,7 @@ import { connection } from '../../config/redis.js';
 import { cached, invalidateVideo } from '../utils/cache.js';
 import { Like } from '../models/like.models.js';
 import { Subscription } from '../models/subscription.models.js';
+import { WatchProgress } from '../models/watchProgress.models.js';
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
@@ -230,13 +231,16 @@ const getVideoById = asyncHandler(async (req, res) => {
   const ownerId = video.owner?._id
   const userId = req.user?._id
 
-  const [likesCount, likeDoc, subDoc] = await Promise.all([
+  const [likesCount, likeDoc, subDoc, progressDoc] = await Promise.all([
     Like.countDocuments({target: videoObjId, onModel: 'Video'}),
     userId ? Like.exists({target: videoObjId, likedBy: userId}) : null,
-    userId && ownerId ? Subscription.exists({subscriber: userId, channel: ownerId}): null
+    userId && ownerId ? Subscription.exists({subscriber: userId, channel: ownerId}): null,
+    userId
+      ? WatchProgress.findOne({ user: userId, video: videoObjId }).select('position').lean()
+      : null
   ])
 
-  return res.status(200).json(new ApiResponse(200, {...video, likesCount, isLiked: !!likeDoc, isSubscribed: !!subDoc}, 'Video is fetched succesfully'))
+  return res.status(200).json(new ApiResponse(200, {...video, likesCount, isLiked: !!likeDoc, isSubscribed: !!subDoc, resumeAt: progressDoc?.position || 0 }, 'Video is fetched succesfully'))
 });
 
 const updateVideo = asyncHandler(async (req, res) => {
@@ -373,4 +377,46 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
     );
 });
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus };
+const saveProgress = asyncHandler(async (req, res) => {
+  const {videoId} = req.params;
+
+  if(!mongoose.Types.ObjectId.isValid(videoId)) {
+    throw new ApiError(400, 'Video id is invalid');
+  }
+
+  const position = Number(req.body.position);
+  const duration = Number(req.body.duration);
+
+  if(!Number.isFinite(position) || position < 0) {
+    throw new ApiError(400, 'Invalid position');
+  }
+
+  if(!Number.isFinite(duration) || duration <= 0) {
+    throw new ApiError(400, 'Invalid duration')
+  }
+
+  const exists = await Video.exists({_id: videoId});
+  if(!exists) throw new ApiError(404, 'Video not found')
+
+  const clamped = Math.min(position, duration);
+  const completed =  clamped / duration  >= 0.95
+
+  await WatchProgress.findOneAndUpdate(
+    {user: req.user._id, video: videoId},
+    {
+      $set: {
+        position: completed ? 0 : Math.floor(clamped),
+        duration: Math.floor(duration),
+        completed,
+        lastWatchedAt: new Date(),
+      }
+    },
+    {
+      upsert:true,  setDefaultsOnInsert: true,
+    }
+  )
+
+  return res.status(200).json(new ApiResponse(400, {}, 'Progress saved'))
+})
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress };
