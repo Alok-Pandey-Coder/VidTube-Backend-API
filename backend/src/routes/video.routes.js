@@ -4,6 +4,7 @@ import {
     getAllVideos,
     getVideoById,
     publishAVideo,
+    saveProgress,
     togglePublishStatus,
     updateVideo,
 } from "../controllers/video.controller.js"
@@ -36,6 +37,9 @@ router
     .get(optionalVerifyJWT,getVideoById)
     .delete(verifyJWT, deleteVideo)
     .patch(verifyJWT, upload.single("thumbnail"), updateVideo);
+
+router
+    .route("/:videoId/progress").put(verifyJWT, saveProgress);
 
 router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 

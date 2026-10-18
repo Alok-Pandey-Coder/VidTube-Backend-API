@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -146,6 +146,10 @@ export const videoApi = {
     const res = await api.patch(`/videos/toggle/publish/${videoId}`);
     return res.data;
   },
+  saveProgress: async (videoId, position, duration) => {
+    const res = await api.put(`/videos/${videoId}/progress`, {position, duration});
+    return res.data;
+  }
 };
 
 export const commentApi = {

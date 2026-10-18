@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
-  ThumbsUp, 
-  Share2, 
-  Bell, 
-  Check, 
-  Loader2, 
-  UserCheck, 
+import {
+  ThumbsUp,
+  Share2,
+  Bell,
+  Check,
+  Loader2,
+  UserCheck,
   Plus,
   Eye,
   Calendar
@@ -27,6 +27,7 @@ export default function WatchPage() {
   const [recommended, setRecommended] = useState([]);
   const [isLiked, setIsLiked] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
   const [copied, setCopied] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
   const likeBusyRef = useRef(false);
@@ -40,6 +41,9 @@ export default function WatchPage() {
         const res = await videoApi.getVideoById(videoId);
         const videoData = res.data;
         setVideo(videoData);
+        setIsLiked(!!videoData.isLiked);
+        setIsSubscribed(!!videoData.isSubscribed);
+        setLikesCount(!!videoData.likesCount);
 
         // Fetch related/recommended videos
         const recRes = await videoApi.getAllVideos({ limit: 8 });
@@ -60,46 +64,49 @@ export default function WatchPage() {
   }, [videoId]);
 
   const handleToggleLike = async () => {
-  if (!isAuthenticated) {
-    alert('Please sign in to like this video');
-    return;
-  }
-  if (likeBusyRef.current) return;       // double click guard
-  likeBusyRef.current = true;
+    if (!isAuthenticated) {
+      alert('Please sign in to like this video');
+      return;
+    }
+    if (likeBusyRef.current) return;       // double click guard
+    likeBusyRef.current = true;
 
-  const prev = isLiked;
-  setIsLiked(!prev);                     // 1) UI turant badlo
-  try {
-    await likeApi.toggleVideoLike(videoId);   // 2) server ko batao
-  } catch (err) {
-    setIsLiked(prev);                    // 3) fail hua to wapas
-    console.error('Like toggle failed', err);
-  } finally {
-    likeBusyRef.current = false;
-  }
-};
+    const prev = isLiked;
+    const prevCount = likesCount;
+    setIsLiked(!prev);
+    setLikesCount((c) => c + (prev ? -1 : 1));                 // 1) UI turant badlo
+    try {
+      await likeApi.toggleVideoLike(videoId);   // 2) server ko batao
+    } catch (err) {
+      setIsLiked(prev);
+      setLikesCount(prevCount);            // 3) fail hua to wapas
+      console.error('Like toggle failed', err);
+    } finally {
+      likeBusyRef.current = false;
+    }
+  };
 
-const handleToggleSubscribe = async () => {
-  if (!isAuthenticated) {
-    alert('Please sign in to subscribe');
-    return;
-  }
-  const channelId = video?.owner?._id || video?.owner;
-  if (!channelId) return;
-  if (subBusyRef.current) return;
-  subBusyRef.current = true;
+  const handleToggleSubscribe = async () => {
+    if (!isAuthenticated) {
+      alert('Please sign in to subscribe');
+      return;
+    }
+    const channelId = video?.owner?._id || video?.owner;
+    if (!channelId) return;
+    if (subBusyRef.current) return;
+    subBusyRef.current = true;
 
-  const prev = isSubscribed;
-  setIsSubscribed(!prev);
-  try {
-    await subscriptionApi.toggleSubscription(channelId);
-  } catch (err) {
-    setIsSubscribed(prev);
-    console.error('Subscription toggle failed', err);
-  } finally {
-    subBusyRef.current = false;
-  }
-};
+    const prev = isSubscribed;
+    setIsSubscribed(!prev);
+    try {
+      await subscriptionApi.toggleSubscription(channelId);
+    } catch (err) {
+      setIsSubscribed(prev);
+      console.error('Subscription toggle failed', err);
+    } finally {
+      subBusyRef.current = false;
+    }
+  };
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -149,6 +156,9 @@ const handleToggleSubscribe = async () => {
             url={videoSourceUrl}
             poster={video.thumbnail}
             title={video.title}
+            videoId={videoId}
+            resumeAt={video.resumeAt || 0}
+            canSave={isAuthenticated}
           />
 
           {/* Title */}
@@ -180,11 +190,10 @@ const handleToggleSubscribe = async () => {
               {!isOwner && (
                 <button
                   onClick={handleToggleSubscribe}
-                  className={`ml-4 px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${
-                    isSubscribed
+                  className={`ml-4 px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${isSubscribed
                       ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                       : 'bg-white text-zinc-950 hover:bg-zinc-200'
-                  }`}
+                    }`}
                 >
                   {isSubscribed ? (
                     <>
@@ -202,14 +211,13 @@ const handleToggleSubscribe = async () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleToggleLike}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition border ${
-                  isLiked
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition border ${isLiked
                     ? 'bg-red-600/20 text-red-500 border-red-500/40'
                     : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
-                }`}
+                  }`}
               >
                 <ThumbsUp className={`w-4 h-4 ${isLiked ? 'fill-red-500' : ''}`} />
-                <span>Like</span>
+                <span>{likesCount > 0 ? likesCount : 'Like'}</span>
               </button>
 
               <button
