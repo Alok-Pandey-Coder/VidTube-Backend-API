@@ -419,4 +419,87 @@ const saveProgress = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(400, {}, 'Progress saved'))
 })
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress };
+const getWatchHistory = asyncHandler(async (req, res) => {
+  let {cursor, limit = 12} = req.query
+  limit = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
+  
+  const filter = {user: req.user._id};
+
+  if(cursor) {
+    const c = decodeCursor(cursor);
+    if(!c) throw new ApiError(400, 'Invalid cursor');
+
+    const v = new Date(c.v);
+    const id = new mongoose.Types.ObjectId(c.id);
+
+    filter.$or = [
+      {lastWatchedAt: {$lt: v}},
+      {lastWatchedAt: v, _id: {$lt: id}},
+    ]
+  }
+
+  const docs = await WatchProgress.aggregate([
+    {$match: filter},
+    {$sort: {lastWatchedAt: -1, _id: -1}},
+    {$limit: limit + 1},
+    {
+      $lookup: {
+        from: 'videos',
+        localField: 'video',
+        foreignField: '_id',
+        as: 'video',
+      },
+    },
+    {$unwind: '$video'},
+    {$match: {'video.isPublished': true}},
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'video.owner',
+        foreignField: '_id',
+        as: 'owner',
+      },
+    },
+    {$unwind: '$owner'},
+    {
+      $project: {
+        _id: '$video._id',
+        historyId: '$_id',
+        title: '$video.title',
+        description: '$video.description',
+        thumbnail: '$video.thumbnail',
+        videoFile: '$video.videoFile',
+        views: '$video.views',
+        createdAt: '$video.createdAt',
+        duration: '$video.duration',
+        owner: {
+          _id: '$owner._id',
+          username: '$owner.username',
+          avatar: '$owner.avatar',
+        },
+        progress: {
+          position: '$position',
+          duration: '$duration',
+          completed: '$completed',
+          lastWatchedAt: '$lastWatchedAt',
+        },
+      }
+    }
+  ])
+
+  const hasMore = docs.length > limit;
+  const items = hasMore ? docs.slice(0, limit) : docs;
+  const last = items[items.length - 1];
+  const nextCursor =
+    hasMore && last ? encodeCursor(last.progress.lastWatchedAt, last.historyId) : null;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      { data: items, pagination: { nextCursor, hasMore, limit } },
+      'Watch history fetched',
+    ),
+  );
+})
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory };
