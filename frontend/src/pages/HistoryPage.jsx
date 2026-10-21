@@ -1,82 +1,136 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { History, Loader2, Play } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Loader2, History } from 'lucide-react';
 import { authApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import VideoCard from '../components/VideoCard';
 
+const PAGE_SIZE = 12;
+
 export default function HistoryPage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const navigate = useNavigate();
-  const [historyList, setHistoryList] = useState([]);
+  const { isAuthenticated } = useAuth();
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [error, setError] = useState(null);
+  const sentinelRef = useRef(null);
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate('/login');
+    if (!isAuthenticated) {
+      setLoading(false);
       return;
     }
+    let cancelled = false;
 
-    const fetchHistory = async () => {
+    (async () => {
       try {
         setLoading(true);
-        const res = await authApi.getWatchHistory();
-        // Backend returns ApiResponse(200, user[0].watchHistory, "Watch history fetched")
-        const list = res.data || [];
-        setHistoryList(list);
+        setError(null);
+        const res = await authApi.getWatchHistory({ limit: PAGE_SIZE });
+        if (cancelled) return;
+        setItems(res.data?.data || []);
+        setNextCursor(res.data?.pagination?.nextCursor || null);
       } catch (err) {
-        console.warn('History error', err);
-        setHistoryList([]);
+        if (!cancelled) setError(err.response?.data?.message || 'Failed to load history');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
+    })();
+
+    return () => {
+      cancelled = true;
     };
+  }, [isAuthenticated]);
 
-    if (isAuthenticated) {
-      fetchHistory();
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore || loading) return;
+    try {
+      setLoadingMore(true);
+      const res = await authApi.getWatchHistory({ limit: PAGE_SIZE, cursor: nextCursor });
+      setItems((prev) => {
+        const seen = new Set(prev.map((i) => i.historyId));
+        const fresh = (res.data?.data || []).filter((i) => !seen.has(i.historyId));
+        return [...prev, ...fresh];
+      });
+      setNextCursor(res.data?.pagination?.nextCursor || null);
+    } catch (err) {
+      console.error('Failed to load more history', err);
+    } finally {
+      setLoadingMore(false);
     }
-  }, [isAuthenticated, authLoading]);
+  }, [nextCursor, loadingMore, loading]);
 
-  if (authLoading || loading) {
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMore();
+      },
+      { rootMargin: '400px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore, items.length]);
+
+  if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-red-500" />
+      <div className="max-w-md mx-auto my-20 p-8 bg-zinc-900 rounded-2xl border border-zinc-800 text-center space-y-3">
+        <History className="w-10 h-10 text-zinc-600 mx-auto" />
+        <h2 className="text-lg font-bold text-white">Sign in to see your history</h2>
+        <Link to="/" className="inline-block text-xs text-red-400 hover:text-red-300">
+          Back to Home
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-3 pb-4 border-b border-zinc-800">
-        <div className="p-3 bg-red-600/10 text-red-500 rounded-2xl">
-          <History className="w-6 h-6" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Watch History</h1>
-          <p className="text-xs text-zinc-400">Recently watched videos</p>
-        </div>
-      </div>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      <h1 className="text-xl font-bold text-white flex items-center gap-2">
+        <History className="w-5 h-5 text-zinc-400" />
+        Watch history
+      </h1>
 
-      {historyList.length === 0 ? (
-        <div className="text-center py-20 bg-zinc-900/30 rounded-3xl border border-zinc-800 p-8 max-w-md mx-auto space-y-3">
-          <History className="w-12 h-12 text-zinc-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">No watch history</h3>
-          <p className="text-xs text-zinc-400">
-            Videos you watch will appear here so you can easily pick up where you left off.
-          </p>
-          <Link
-            to="/"
-            className="inline-block px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition"
-          >
-            Start Watching
-          </Link>
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-red-500" />
         </div>
+      ) : error ? (
+        <p className="text-red-400 text-sm">{error}</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-zinc-400 py-16 text-center">
+          Nothing here yet. Videos you watch will show up here.
+        </p>
       ) : (
-        <div className="space-y-4 max-w-4xl">
-          {historyList.map((vid) => (
-            <VideoCard key={vid._id || vid.id} video={vid} layout="horizontal" />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8">
+            {items.map((item) => {
+              const p = item.progress;
+              const pct = p.completed
+                ? 100
+                : p.duration > 0
+                ? Math.min(100, Math.round((p.position / p.duration) * 100))
+                : 0;
+              return (
+                <div key={item.historyId}>
+                  <VideoCard video={item} />
+                  <div className="mt-2 h-1 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-red-600" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {loadingMore && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 animate-spin text-red-500" />
+            </div>
+          )}
+          {nextCursor && <div ref={sentinelRef} className="h-10" />}
+        </>
       )}
     </div>
   );

@@ -101,8 +101,8 @@ export const authApi = {
     });
     return res.data;
   },
-  getWatchHistory: async () => {
-    const res = await api.get('/users/history');
+  getWatchHistory: async (params = {}) => {
+    const res = await api.get('/users/history', { params });
     return res.data;
   },
   getUserProfile: async (username) => {
