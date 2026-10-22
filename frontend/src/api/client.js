@@ -276,4 +276,19 @@ export const dashboardApi = {
   },
 };
 
+export const watchLaterApi = {
+  add: async (videoId) => {
+    const res = await api.put(`/watch-later/${videoId}`);
+    return res.data;
+  },
+  remove: async (videoId) => {
+    const res = await api.delete(`/watch-later/${videoId}`);
+    return res.data;
+  },
+  list: async (params = {}) => {
+    const res = await api.get('/watch-later', { params });
+    return res.data;
+  },
+};
+
 export default api;

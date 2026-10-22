@@ -9,14 +9,17 @@ import {
   UserCheck,
   Plus,
   Eye,
-  Calendar
+  Calendar,
+  Clock
 } from 'lucide-react';
-import { videoApi, likeApi, subscriptionApi } from '../api/client';
+import { videoApi, likeApi, subscriptionApi, watchLaterApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import CommentSection from '../components/CommentSection';
 import VideoCard from '../components/VideoCard';
 import { formatViews, timeAgo } from '../utils/formatters';
+
+const THEATER_KEY = 'vidtube_theater';
 
 export default function WatchPage() {
   const { videoId } = useParams();
@@ -32,6 +35,26 @@ export default function WatchPage() {
   const [descExpanded, setDescExpanded] = useState(false);
   const likeBusyRef = useRef(false);
   const subBusyRef = useRef(false);
+  const [isWatchLater, setIsWatchLater] = useState(false);
+  const wlBusyRef = useRef(false);
+
+  const [theater, setTheater] = useState(() => {
+    try {
+      return localStorage.getItem(THEATER_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTheater = () => setTheater((prev) => !prev);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(THEATER_KEY, theater ? '1' : '0');
+    } catch {
+      // storage unavailable, preference just won't persist
+    }
+  }, [theater]);
 
   useEffect(() => {
     const fetchVideoDetails = async () => {
@@ -43,7 +66,8 @@ export default function WatchPage() {
         setVideo(videoData);
         setIsLiked(!!videoData.isLiked);
         setIsSubscribed(!!videoData.isSubscribed);
-        setLikesCount(!!videoData.likesCount);
+        setIsWatchLater(!!videoData.isWatchLater);
+        setLikesCount(videoData.likesCount || 0);
 
         // Fetch related/recommended videos
         const recRes = await videoApi.getAllVideos({ limit: 8 });
@@ -68,18 +92,18 @@ export default function WatchPage() {
       alert('Please sign in to like this video');
       return;
     }
-    if (likeBusyRef.current) return;       // double click guard
+    if (likeBusyRef.current) return;
     likeBusyRef.current = true;
 
     const prev = isLiked;
     const prevCount = likesCount;
     setIsLiked(!prev);
-    setLikesCount((c) => c + (prev ? -1 : 1));                 // 1) UI turant badlo
+    setLikesCount((c) => c + (prev ? -1 : 1));
     try {
-      await likeApi.toggleVideoLike(videoId);   // 2) server ko batao
+      await likeApi.toggleVideoLike(videoId);
     } catch (err) {
       setIsLiked(prev);
-      setLikesCount(prevCount);            // 3) fail hua to wapas
+      setLikesCount(prevCount);
       console.error('Like toggle failed', err);
     } finally {
       likeBusyRef.current = false;
@@ -114,6 +138,27 @@ export default function WatchPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleToggleWatchLater = async () => {
+    if (!isAuthenticated) {
+      alert('Please sign in to use Watch Later');
+      return;
+    }
+    if (wlBusyRef.current) return;
+    wlBusyRef.current = true;
+
+    const next = !isWatchLater;
+    setIsWatchLater(next);
+    try {
+      if (next) await watchLaterApi.add(videoId);
+      else await watchLaterApi.remove(videoId);
+    } catch (err) {
+      setIsWatchLater(!next);
+      console.error('Watch Later failed', err);
+    } finally {
+      wlBusyRef.current = false;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -137,7 +182,7 @@ export default function WatchPage() {
     );
   }
 
-  // CHANGED: API_ORIGIN hata diya, relative /media URL (Vite proxy se backend tak jayega)
+  // Relative /media URL (Vite proxy se backend tak jayega)
   const legacyUrl = video.videoFile?.url || video.videoFile;
   const videoSourceUrl = video.hlsKey
     ? `/media/${video.hlsKey}`
@@ -148,10 +193,9 @@ export default function WatchPage() {
 
   return (
     <div className="max-w-[1700px] mx-auto p-4 lg:p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {/* Left 2-3 Columns: Video Player, Meta, Comments */}
-        <div className="lg:col-span-2 xl:col-span-3 space-y-4">
-          {/* Main Video Player */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4">
+        {/* 1) Player: theater me poori width, normal me left columns */}
+        <div className={theater ? 'col-span-full' : 'lg:col-span-2 xl:col-span-3'}>
           <VideoPlayer
             url={videoSourceUrl}
             poster={video.thumbnail}
@@ -159,8 +203,13 @@ export default function WatchPage() {
             videoId={videoId}
             resumeAt={video.resumeAt || 0}
             canSave={isAuthenticated}
+            theater={theater}
+            onToggleTheater={toggleTheater}
           />
+        </div>
 
+        {/* 2) Details: title, actions, description, comments */}
+        <div className="lg:col-span-2 xl:col-span-3 space-y-4">
           {/* Title */}
           <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
             {video.title}
@@ -191,8 +240,8 @@ export default function WatchPage() {
                 <button
                   onClick={handleToggleSubscribe}
                   className={`ml-4 px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 ${isSubscribed
-                      ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                      : 'bg-white text-zinc-950 hover:bg-zinc-200'
+                    ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                    : 'bg-white text-zinc-950 hover:bg-zinc-200'
                     }`}
                 >
                   {isSubscribed ? (
@@ -212,8 +261,8 @@ export default function WatchPage() {
               <button
                 onClick={handleToggleLike}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition border ${isLiked
-                    ? 'bg-red-600/20 text-red-500 border-red-500/40'
-                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
+                  ? 'bg-red-600/20 text-red-500 border-red-500/40'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
                   }`}
               >
                 <ThumbsUp className={`w-4 h-4 ${isLiked ? 'fill-red-500' : ''}`} />
@@ -226,6 +275,17 @@ export default function WatchPage() {
               >
                 {copied ? <Check className="w-4 h-4 text-green-400" /> : <Share2 className="w-4 h-4" />}
                 <span>{copied ? 'Copied Link!' : 'Share'}</span>
+              </button>
+
+              <button
+                onClick={handleToggleWatchLater}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition border ${isWatchLater
+                  ? 'bg-white text-zinc-950 border-white'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
+                  }`}
+              >
+                <Clock className="w-4 h-4" />
+                <span>{isWatchLater ? 'Saved' : 'Watch later'}</span>
               </button>
             </div>
           </div>
@@ -262,8 +322,12 @@ export default function WatchPage() {
           <CommentSection videoId={videoId} />
         </div>
 
-        {/* Right Column: Up Next / Recommended */}
-        <div className="space-y-4">
+        {/* 3) Up Next: normal me player ke saath right column, theater me details ke neeche-side me */}
+        <div
+          className={`space-y-4 ${
+            theater ? '' : 'lg:col-start-3 xl:col-start-4 lg:row-start-1 lg:row-span-2'
+          }`}
+        >
           <h3 className="font-bold text-sm text-zinc-300 uppercase tracking-wider">
             Up Next
           </h3>
