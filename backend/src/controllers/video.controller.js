@@ -13,15 +13,16 @@ import { cached, invalidateVideo } from '../utils/cache.js';
 import { Like } from '../models/like.models.js';
 import { Subscription } from '../models/subscription.models.js';
 import { WatchProgress } from '../models/watchProgress.models.js';
+import { WatchLater } from '../models/watchLater.models.js';
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
 
-const encodeCursor = (value, id) => {
+export const encodeCursor = (value, id) => {
   Buffer.from(JSON.stringify({ v: value, id })).toString('base64url');
 };
 
-const decodeCursor = (cursor) => {
+export const decodeCursor = (cursor) => {
   try {
     return JSON.parse(Buffer.from(cursor, 'base64url').toString());
   } catch (error) {
@@ -231,16 +232,17 @@ const getVideoById = asyncHandler(async (req, res) => {
   const ownerId = video.owner?._id
   const userId = req.user?._id
 
-  const [likesCount, likeDoc, subDoc, progressDoc] = await Promise.all([
+  const [likesCount, likeDoc, subDoc, progressDoc, watchLaterDoc] = await Promise.all([
     Like.countDocuments({target: videoObjId, onModel: 'Video'}),
     userId ? Like.exists({target: videoObjId, likedBy: userId}) : null,
     userId && ownerId ? Subscription.exists({subscriber: userId, channel: ownerId}): null,
     userId
       ? WatchProgress.findOne({ user: userId, video: videoObjId }).select('position').lean()
-      : null
+      : null,
+    userId ? WatchLater.exists({ user: userId, video: videoObjId }) : null,
   ])
 
-  return res.status(200).json(new ApiResponse(200, {...video, likesCount, isLiked: !!likeDoc, isSubscribed: !!subDoc, resumeAt: progressDoc?.position || 0 }, 'Video is fetched succesfully'))
+  return res.status(200).json(new ApiResponse(200, {...video, likesCount, isLiked: !!likeDoc, isSubscribed: !!subDoc, resumeAt: progressDoc?.position || 0 , isWatchLater: !!watchLaterDoc}, 'Video is fetched succesfully'))
 });
 
 const updateVideo = asyncHandler(async (req, res) => {

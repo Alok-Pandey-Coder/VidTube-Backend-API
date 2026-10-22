@@ -38,6 +38,7 @@ import tweetRouter from "./routes/tweet.routes.js"
 import commentRouter from "./routes/comment.routes.js"
 import subscriptionRouter from "./routes/subscription.routes.js"
 import likeRouter from "./routes/like.routes.js"
+import WatchLaterRouter from "./routes/watchLater.routes.js"
 
 
 app.use("/api/v1/healthcheck", healthcheckRouter)
@@ -49,6 +50,7 @@ app.use("/api/v1/tweet", tweetRouter)
 app.use("/api/v1/comments", commentRouter)
 app.use("/api/v1/subscriptions", subscriptionRouter)
 app.use("/api/v1/likes", likeRouter)
+app.use("/api/v1/watch-later", WatchLaterRouter);
 
 
 export { app }

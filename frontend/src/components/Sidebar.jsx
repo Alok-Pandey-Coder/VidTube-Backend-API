@@ -9,7 +9,8 @@ import {
   ListVideo, 
   Compass, 
   Sparkles,
-  Users
+  Users,
+  Clock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -24,6 +25,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
   const personalItems = [
     { name: 'History', path: '/history', icon: History, requireAuth: true },
+    { name: 'Watch later', path: '/watch-later', icon: Clock, requireAuth: true },
     { name: 'Liked Videos', path: '/liked-videos', icon: ThumbsUp, requireAuth: true },
     { name: 'Playlists', path: '/playlists', icon: ListVideo, requireAuth: true },
     { name: 'Studio', path: '/dashboard', icon: LayoutDashboard, requireAuth: true },

@@ -13,6 +13,7 @@ import LikedVideosPage from './pages/LikedVideosPage';
 import HistoryPage from './pages/HistoryPage';
 import TweetsPage from './pages/TweetsPage';
 import PlaylistsPage from './pages/PlaylistsPage';
+import WatchLaterPage from './pages/WatchLaterPage';
 import { useAuth } from './context/AuthContext';
 
 export default function App() {
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/tweets" element={<TweetsPage />} />
             <Route path="*" element={<HomePage onOpenUpload={handleOpenUpload} />} />
+            <Route path="/watch-later" element={<WatchLaterPage />} />
           </Routes>
         </main>
       </div>
