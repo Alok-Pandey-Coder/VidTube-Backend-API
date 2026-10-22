@@ -19,6 +19,8 @@ import CommentSection from '../components/CommentSection';
 import VideoCard from '../components/VideoCard';
 import { formatViews, timeAgo } from '../utils/formatters';
 
+const THEATER_KEY = 'vidtube_theater';
+
 export default function WatchPage() {
   const { videoId } = useParams();
   const { user, isAuthenticated } = useAuth();
@@ -36,6 +38,24 @@ export default function WatchPage() {
   const [isWatchLater, setIsWatchLater] = useState(false);
   const wlBusyRef = useRef(false);
 
+  const [theater, setTheater] = useState(() => {
+    try {
+      return localStorage.getItem(THEATER_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleTheater = () => setTheater((prev) => !prev);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(THEATER_KEY, theater ? '1' : '0');
+    } catch {
+      // storage unavailable, preference just won't persist
+    }
+  }, [theater]);
+
   useEffect(() => {
     const fetchVideoDetails = async () => {
       try {
@@ -47,7 +67,7 @@ export default function WatchPage() {
         setIsLiked(!!videoData.isLiked);
         setIsSubscribed(!!videoData.isSubscribed);
         setIsWatchLater(!!videoData.isWatchLater);
-        setLikesCount(videoData.likesCount || 0);   // FIXED: number hai, boolean nahi
+        setLikesCount(videoData.likesCount || 0);
 
         // Fetch related/recommended videos
         const recRes = await videoApi.getAllVideos({ limit: 8 });
@@ -72,18 +92,18 @@ export default function WatchPage() {
       alert('Please sign in to like this video');
       return;
     }
-    if (likeBusyRef.current) return;       // double click guard
+    if (likeBusyRef.current) return;
     likeBusyRef.current = true;
 
     const prev = isLiked;
     const prevCount = likesCount;
     setIsLiked(!prev);
-    setLikesCount((c) => c + (prev ? -1 : 1));   // 1) UI turant badlo
+    setLikesCount((c) => c + (prev ? -1 : 1));
     try {
-      await likeApi.toggleVideoLike(videoId);    // 2) server ko batao
+      await likeApi.toggleVideoLike(videoId);
     } catch (err) {
       setIsLiked(prev);
-      setLikesCount(prevCount);                  // 3) fail hua to wapas
+      setLikesCount(prevCount);
       console.error('Like toggle failed', err);
     } finally {
       likeBusyRef.current = false;
@@ -173,10 +193,9 @@ export default function WatchPage() {
 
   return (
     <div className="max-w-[1700px] mx-auto p-4 lg:p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {/* Left 2-3 Columns: Video Player, Meta, Comments */}
-        <div className="lg:col-span-2 xl:col-span-3 space-y-4">
-          {/* Main Video Player */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4">
+        {/* 1) Player: theater me poori width, normal me left columns */}
+        <div className={theater ? 'col-span-full' : 'lg:col-span-2 xl:col-span-3'}>
           <VideoPlayer
             url={videoSourceUrl}
             poster={video.thumbnail}
@@ -184,8 +203,13 @@ export default function WatchPage() {
             videoId={videoId}
             resumeAt={video.resumeAt || 0}
             canSave={isAuthenticated}
+            theater={theater}
+            onToggleTheater={toggleTheater}
           />
+        </div>
 
+        {/* 2) Details: title, actions, description, comments */}
+        <div className="lg:col-span-2 xl:col-span-3 space-y-4">
           {/* Title */}
           <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
             {video.title}
@@ -298,8 +322,12 @@ export default function WatchPage() {
           <CommentSection videoId={videoId} />
         </div>
 
-        {/* Right Column: Up Next / Recommended */}
-        <div className="space-y-4">
+        {/* 3) Up Next: normal me player ke saath right column, theater me details ke neeche-side me */}
+        <div
+          className={`space-y-4 ${
+            theater ? '' : 'lg:col-start-3 xl:col-start-4 lg:row-start-1 lg:row-span-2'
+          }`}
+        >
           <h3 className="font-bold text-sm text-zinc-300 uppercase tracking-wider">
             Up Next
           </h3>
