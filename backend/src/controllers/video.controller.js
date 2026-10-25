@@ -18,6 +18,15 @@ import { WatchLater } from '../models/watchLater.models.js';
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
 
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const DATE_RANGES = { today: 1, week: 7, month: 30, year: 365 };
+const DURATION_RANGES = {
+  short: { $lt: 240 },
+  medium: { $gte: 240, $lte: 1200 },
+  long: { $gt: 1200 },
+};
+
 export const encodeCursor = (value, id) => {
   Buffer.from(JSON.stringify({ v: value, id })).toString('base64url');
 };
@@ -30,7 +39,8 @@ export const decodeCursor = (cursor) => {
   }
 };
 const getAllVideos = asyncHandler(async (req, res) => {
-  let { cursor, limit = 12, query, sortBy, sortType, userId } = req.query;
+  let { cursor, limit = 12, query, sortBy, sortType, userId, uploadDate, duration } = req.query;
+const q = typeof query === 'string' ? query.trim().slice(0, 100) : '';
 
   limit = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
   const sortField = SORTABLE.includes(sortBy) ? sortBy : 'createdAt';
@@ -41,13 +51,18 @@ const getAllVideos = asyncHandler(async (req, res) => {
     { status: { $nin: ['uploaded', 'processing', 'failed'] } },
   ];
 
-  if (query) {
-    filters.push({
-      $or: [
-        { title: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-      ],
-    });
+    if (q) {
+    const rx = { $regex: escapeRegex(q), $options: 'i' };
+    filters.push({ $or: [{ title: rx }, { description: rx }] });
+  }
+
+  if (typeof uploadDate === 'string' && Object.hasOwn(DATE_RANGES, uploadDate)) {
+    const since = new Date(Date.now() - DATE_RANGES[uploadDate] * 24 * 60 * 60 * 1000);
+    filters.push({ createdAt: { $gte: since } });
+  }
+
+  if (typeof duration === 'string' && Object.hasOwn(DURATION_RANGES, duration)) {
+    filters.push({ duration: DURATION_RANGES[duration] });
   }
 
   if (userId) {
@@ -109,11 +124,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
   };
 
   let data;
-  if (query) {
+  if (q) {
     data = await runAggregation();
   } else {
     const ver = (await connection.get('feed:ver')) || '0';
-    const key = `feed:${ver}:${JSON.stringify({ cursor, limit, sortField, dir, userId })}`;
+    const key = `feed:${ver}:${JSON.stringify({ cursor, limit, sortField, dir, userId, uploadDate, duration })}`;
     data = await cached(key, 60, runAggregation);
   }
 
