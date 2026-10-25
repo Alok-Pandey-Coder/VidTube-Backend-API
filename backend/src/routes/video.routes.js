@@ -7,6 +7,7 @@ import {
     saveProgress,
     togglePublishStatus,
     updateVideo,
+    getSearchSuggestions
 } from "../controllers/video.controller.js"
 import {optionalVerifyJWT, verifyJWT} from "../middlewares/auth.middleware.js"
 import {upload} from "../middlewares/multer.middlewares.js"
@@ -32,6 +33,7 @@ router
         publishAVideo
     );
 
+router.route("/suggest").get(getSearchSuggestions);
 router
     .route("/:videoId")
     .get(optionalVerifyJWT,getVideoById)
