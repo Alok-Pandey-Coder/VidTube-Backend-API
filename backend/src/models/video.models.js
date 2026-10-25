@@ -28,6 +28,9 @@ const videoSchema = new Schema(
     hlsKey: {
       type: String,
     },
+    previewKey: {
+      type: String,
+    },
     thumbnail: {
       type: String,
       required: true

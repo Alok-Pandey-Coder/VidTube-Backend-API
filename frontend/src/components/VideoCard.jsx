@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, CheckCircle2 } from 'lucide-react';
 import { formatDuration, formatViews, timeAgo } from '../utils/formatters';
+import useHoverPreview from '../hooks/useHoverPreview';
 
 export default function VideoCard({ video, layout = 'grid' }) {
   const [imgError, setImgError] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const preview = useHoverPreview(video?.previewKey);
 
   if (!video) return null;
 
@@ -74,6 +76,7 @@ export default function VideoCard({ video, layout = 'grid' }) {
       {/* Thumbnail Container */}
       <Link
         to={`/watch/${videoId}`}
+        {...preview.handlers}
         className="relative w-full aspect-video bg-zinc-900 rounded-2xl overflow-hidden shadow-lg border border-zinc-800/60 group-hover:border-zinc-700 transition"
       >
         <img
@@ -83,12 +86,31 @@ export default function VideoCard({ video, layout = 'grid' }) {
           className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
           loading="lazy"
         />
+
+        {preview.active && (
+          <video
+            src={`/media/${video.previewKey}`}
+            muted
+            loop
+            autoPlay
+            playsInline
+            preload="none"
+            onPlaying={() => preview.setPlaying(true)}
+            className={`pointer-events-none absolute inset-0 w-full h-full object-cover transition-opacity duration-200 ${
+              preview.playing ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+        )}
         {video.duration > 0 && (
           <span className="absolute bottom-2 right-2 px-2 py-0.5 text-xs font-semibold bg-black/85 text-white rounded-md tracking-wider">
             {durationText}
           </span>
         )}
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+        <div
+          className={`absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition ${
+            preview.active ? 'invisible' : ''                  // NEW
+          }`}
+        >
           <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition">
             <Play className="w-6 h-6 fill-white ml-0.5" />
           </div>

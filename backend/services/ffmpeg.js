@@ -79,3 +79,19 @@ export async function transcodeTOHls(inputPath, outDir, srcWidth, srcHeight) {
 
   return variants.map((v) => v.name);
 }
+
+export async function createPreview(inputPath, outPath, startSec = 0) {
+  await run("ffmpeg", [
+    "-y",
+    "-ss", String(startSec),
+    "-t", "4",
+    "-i", inputPath,
+    "-vf", "scale=-2:360",
+    "-an",
+    "-c:v", "libx264",
+    "-preset", "veryfast",
+    "-crf", "28",
+    "-movflags", "+faststart",
+    outPath,
+  ]);
+}

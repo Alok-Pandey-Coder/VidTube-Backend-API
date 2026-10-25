@@ -8,7 +8,7 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import { getFilePath, saveHlsOutput } from '../services/storage.js';
-import { probeVideo, transcodeTOHls } from '../services/ffmpeg.js';
+import { probeVideo, transcodeTOHls, createPreview } from '../services/ffmpeg.js';
 import { invalidateVideo } from '../src/utils/cache.js';
 
 await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
@@ -28,6 +28,7 @@ const worker = new Worker(
     console.log(`[job ${job.id}] source ${width}x${height}, ${duration}s`);
 
     const tmpDir = path.join(os.tmpdir(), `vidtube-hls-${videoId}`);
+    const hlsPrefix = `videos/${videoId}/hls`;
     try {
       await fs.rm(tmpDir, { recursive: true, force: true });
       await fs.mkdir(tmpDir, { recursive: true });
@@ -35,13 +36,22 @@ const worker = new Worker(
       const made = await transcodeTOHls(inputPath, tmpDir, width, height);
       console.log(`[job ${job.id}] renditions:`, made.join(', '));
 
-      const hlsPrefix = `videos/${videoId}/hls`;
+      let previewKey = null;
+      try {
+        const start = duration > 30 ? Math.floor(duration * 0.2) : 0;
+        await createPreview(inputPath, path.join(tmpDir, 'preview.mp4'), start);
+        previewKey = `${hlsPrefix}/preview.mp4`;
+      } catch (err) {
+        console.log(`[job ${job.id}] preview failed (non-fatal):`, err.message);
+      }
+
       await saveHlsOutput(tmpDir, hlsPrefix);
 
       await Video.findByIdAndUpdate(videoId, {
         status: 'ready',
         duration,
         hlsKey: `${hlsPrefix}/master.m3u8`,
+        ...(previewKey && {previewKey }),
       });
 
       await invalidateVideo(videoId);

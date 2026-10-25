@@ -18,8 +18,8 @@ export async function cached(key, ttlSec, fetcher) {
 export const invalidateVideo = async (videoId) => {
   try {
     await Promise.all([
-      connection.del(`video:${videoId}`),
       connection.incr("feed:ver"),
+      connection.del(`video:${videoId}`),
     ])
   } catch (error) {
     console.error("Cache invalidate failed: ", error.message)
