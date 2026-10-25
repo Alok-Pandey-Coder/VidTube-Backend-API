@@ -16,6 +16,8 @@ export default function HomePage({ onOpenUpload }) {
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState('createdAt');
+  const [uploadDate, setUploadDate] = useState('');
+const [durationType, setDurationType] = useState('');
 
   const [loadingMore, setLoadingMore] = useState(false);
 const [nextCursor, setNextCursor] = useState(null);
@@ -30,6 +32,8 @@ const buildParams = (cursor) => {
     sortType: 'desc',
     limit: PAGE_SIZE,
     cursor: cursor || undefined,
+     uploadDate: uploadDate || undefined,
+    duration: durationType || undefined,
   };
 };
 
@@ -71,11 +75,11 @@ const loadMore = useCallback(async () => {
   } finally {
     setLoadingMore(false);
   }
-}, [nextCursor, loadingMore, loading, query, activeCategory, sortBy]);
+}, [nextCursor, loadingMore, loading, query, activeCategory, sortBy, uploadDate, durationType]);
 
 useEffect(() => {
   fetchVideos();
-}, [query, activeCategory, sortBy]);
+}, [query, activeCategory, sortBy, uploadDate, durationType]);
 
 useEffect(() => {
   const el = sentinelRef.current;
@@ -112,6 +116,29 @@ useEffect(() => {
 
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
           <SlidersHorizontal className="w-4 h-4 text-zinc-400" />
+                    <select
+            value={uploadDate}
+            onChange={(e) => setUploadDate(e.target.value)}
+            aria-label="Upload date"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-600"
+          >
+            <option value="">Any time</option>
+            <option value="today">Today</option>
+            <option value="week">This week</option>
+            <option value="month">This month</option>
+            <option value="year">This year</option>
+          </select>
+          <select
+            value={durationType}
+            onChange={(e) => setDurationType(e.target.value)}
+            aria-label="Duration"
+            className="bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-zinc-600"
+          >
+            <option value="">Any length</option>
+            <option value="short">Under 4 min</option>
+            <option value="medium">4-20 min</option>
+            <option value="long">Over 20 min</option>
+          </select>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}

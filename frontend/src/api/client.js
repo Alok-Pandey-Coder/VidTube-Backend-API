@@ -149,6 +149,10 @@ export const videoApi = {
   saveProgress: async (videoId, position, duration) => {
     const res = await api.put(`/videos/${videoId}/progress`, {position, duration});
     return res.data;
+  },
+  suggest: async (q, signal) => {
+    const res = await api.get('/videos/suggest', { params: { q }, signal });
+    return res.data;
   }
 };
 

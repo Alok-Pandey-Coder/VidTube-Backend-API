@@ -17,10 +17,36 @@ import { WatchLater } from '../models/watchLater.models.js';
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
+const ownerStages = [
+  { $lookup: { from: 'users', localField: 'owner', foreignField: '_id', as: 'owner' } },
+  { $unwind: '$owner' },
+  {
+    $project: {
+      title: 1,
+      description: 1,
+      thumbnail: 1,
+      videoFile: 1,
+      views: 1,
+      createdAt: 1,
+      duration: 1,
+      previewKey: 1,
+      owner: { _id: '$owner._id', username: '$owner.username', avatar: '$owner.avatar' },
+    },
+  },
+];
 
-export const encodeCursor = (value, id) => {
-  Buffer.from(JSON.stringify({ v: value, id })).toString('base64url');
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const DATE_RANGES = { today: 1, week: 7, month: 30, year: 365 };
+const DURATION_RANGES = {
+  short: { $lt: 240 },
+  medium: { $gte: 240, $lte: 1200 },
+  long: { $gt: 1200 },
 };
+
+export const encodeCursor = (value, id) => 
+  Buffer.from(JSON.stringify({ v: value, id })).toString('base64url');
+
 
 export const decodeCursor = (cursor) => {
   try {
@@ -29,8 +55,33 @@ export const decodeCursor = (cursor) => {
     return null;
   }
 };
+
+const getSearchSuggestions = asyncHandler(async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 50) : '';
+
+  if (q.length < 2) {
+    return res.status(200).json(new ApiResponse(200, [], 'Suggestions'));
+  }
+
+  const suggestions = await cached(`suggest:${q.toLowerCase()}`, 30, async () => {
+    const docs = await Video.find({
+      isPublished: true,
+      status: { $nin: ['uploaded', 'processing', 'failed'] },
+      title: { $regex: `(^|\\s)${escapeRegex(q)}`, $options: 'i' },
+    })
+      .select('title')
+      .limit(8)
+      .lean();
+
+    return [...new Set(docs.map((d) => d.title))];
+  });
+
+  return res.status(200).json(new ApiResponse(200, suggestions, 'Suggestions'));
+});
+
 const getAllVideos = asyncHandler(async (req, res) => {
-  let { cursor, limit = 12, query, sortBy, sortType, userId } = req.query;
+  let { cursor, limit = 12, query, sortBy, sortType, userId, uploadDate, duration } = req.query;
+const q = typeof query === 'string' ? query.trim().slice(0, 100) : '';
 
   limit = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
   const sortField = SORTABLE.includes(sortBy) ? sortBy : 'createdAt';
@@ -41,20 +92,22 @@ const getAllVideos = asyncHandler(async (req, res) => {
     { status: { $nin: ['uploaded', 'processing', 'failed'] } },
   ];
 
-  if (query) {
-    filters.push({
-      $or: [
-        { title: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-      ],
-    });
+  
+
+  if (typeof uploadDate === 'string' && Object.hasOwn(DATE_RANGES, uploadDate)) {
+    const since = new Date(Date.now() - DATE_RANGES[uploadDate] * 24 * 60 * 60 * 1000);
+    filters.push({ createdAt: { $gte: since } });
+  }
+
+  if (typeof duration === 'string' && Object.hasOwn(DURATION_RANGES, duration)) {
+    filters.push({ duration: DURATION_RANGES[duration] });
   }
 
   if (userId) {
     filters.push({ owner: new mongoose.Types.ObjectId(userId) });
   }
 
-  if (cursor) {
+  if (cursor && !q) {
     const c = decodeCursor(cursor);
     if (!c) throw new ApiError(400, 'invalid cursor');
 
@@ -67,53 +120,73 @@ const getAllVideos = asyncHandler(async (req, res) => {
     });
   }
 
-  const runAggregation = async () => {
+    const runAggregation = async () => {
     const docs = await Video.aggregate([
       { $match: { $and: filters } },
       { $sort: { [sortField]: dir, _id: dir } },
       { $limit: limit + 1 },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'owner',
-          foreignField: '_id',
-          as: 'owner',
-        },
-      },
-      { $unwind: '$owner' },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          thumbnail: 1,
-          videoFile: 1,
-          views: 1,
-          createdAt: 1,
-          duration: 1,
-          owner: {
-            _id: '$owner._id',
-            username: '$owner.username',
-            avatar: '$owner.avatar',
-          },
-          previewKey: 1,
-        },
-      },
+      ...ownerStages,
     ]);
 
     const hasMore = docs.length > limit;
     const videos = hasMore ? docs.slice(0, limit) : docs;
     const last = videos[videos.length - 1];
-    const nextCursor = hasMore && last ? encodeCursor(last[sortField] ?? 0, last._id) : null;
+    const nextCursor =
+      hasMore && last ? encodeCursor(last[sortField] ?? 0, last._id) : null;
 
     return { videos, nextCursor, hasMore };
   };
 
   let data;
-  if (query) {
-    data = await runAggregation();
+  if (q) {
+    let skip = 0;
+    if (cursor) {
+      const c = decodeCursor(cursor);
+      skip = c && Number.isInteger(c.v) && c.v >= 0 ? c.v : 0;
+    }
+
+    const docs = await Video.aggregate([
+      {
+        $search: {
+          index: 'videos_search',
+          compound: {
+            should: [
+              {
+                text: {
+                  query: q,
+                  path: 'title',
+                  fuzzy: { maxEdits: 1, prefixLength: 2 },
+                  score: { boost: { value: 3 } },
+                },
+              },
+              {
+                text: {
+                  query: q,
+                  path: 'description',
+                  fuzzy: { maxEdits: 1, prefixLength: 2 },
+                },
+              },
+            ],
+            minimumShouldMatch: 1,
+          },
+        },
+      },
+      { $match: { $and: filters } },
+      { $skip: skip },
+      { $limit: limit + 1 },
+      ...ownerStages,
+    ]);
+
+    const hasMore = docs.length > limit;
+    const videos = hasMore ? docs.slice(0, limit) : docs;
+    data = {
+      videos,
+      hasMore,
+      nextCursor: hasMore ? encodeCursor(skip + limit, 'search') : null,
+    };
   } else {
     const ver = (await connection.get('feed:ver')) || '0';
-    const key = `feed:${ver}:${JSON.stringify({ cursor, limit, sortField, dir, userId })}`;
+    const key = `feed:${ver}:${JSON.stringify({ cursor, limit, sortField, dir, userId, uploadDate, duration })}`;
     data = await cached(key, 60, runAggregation);
   }
 
@@ -419,7 +492,7 @@ const saveProgress = asyncHandler(async (req, res) => {
     }
   )
 
-  return res.status(200).json(new ApiResponse(400, {}, 'Progress saved'))
+  return res.status(200).json(new ApiResponse(200, {}, 'Progress saved'))
 })
 
 const getWatchHistory = asyncHandler(async (req, res) => {
@@ -505,4 +578,4 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   );
 })
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory };
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions };
