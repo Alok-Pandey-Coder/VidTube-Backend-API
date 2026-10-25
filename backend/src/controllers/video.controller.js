@@ -95,6 +95,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
             username: '$owner.username',
             avatar: '$owner.avatar',
           },
+          previewKey: 1,
         },
       },
     ]);
