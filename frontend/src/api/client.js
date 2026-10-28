@@ -295,4 +295,15 @@ export const watchLaterApi = {
   },
 };
 
+export const notificationApi = {
+  list: async () => {
+    const res = await api.get('/notifications');
+    return res.data;
+  },
+  markAllRead: async () => {
+    const res = await api.patch('/notifications/read-all');
+    return res.data;
+  },
+};
+
 export default api;

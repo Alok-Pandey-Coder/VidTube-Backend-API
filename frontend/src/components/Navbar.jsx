@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import useSearchSuggestions from '../hooks/useSearchSuggestions.js';
+import NotificationBell from './NotificationBell.jsx';
 
 export default function Navbar({ onToggleSidebar, onOpenUpload }) {
   const { user, isAuthenticated, logout } = useAuth();
@@ -161,6 +162,8 @@ export default function Navbar({ onToggleSidebar, onOpenUpload }) {
         )}
       </form>
 
+      {isAuthenticated && <NotificationBell />}
+
       {/* Right: Actions */}
       <div className="flex items-center gap-3">
         {isAuthenticated ? (
@@ -170,7 +173,7 @@ export default function Navbar({ onToggleSidebar, onOpenUpload }) {
               className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-600/10 hover:bg-red-600/20 text-red-500 text-sm font-medium border border-red-500/30 transition"
             >
               <Upload className="w-4 h-4" />
-              <span>Create</span>
+              <span>Upload</span>
             </button>
 
             <button className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition">

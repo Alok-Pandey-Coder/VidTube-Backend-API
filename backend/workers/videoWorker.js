@@ -10,6 +10,7 @@ import fs from 'fs/promises';
 import { getFilePath, saveHlsOutput } from '../services/storage.js';
 import { probeVideo, transcodeTOHls, createPreview } from '../services/ffmpeg.js';
 import { invalidateVideo } from '../src/utils/cache.js';
+import { notifyUser } from '../services/notify.js';
 
 await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
 console.log('Worker: DB connected', mongoose.connection.name);
@@ -51,10 +52,16 @@ const worker = new Worker(
         status: 'ready',
         duration,
         hlsKey: `${hlsPrefix}/master.m3u8`,
-        ...(previewKey && {previewKey }),
+        ...(previewKey && { previewKey }),
       });
 
       await invalidateVideo(videoId);
+
+      await notifyUser(video.owner, {
+        type: 'video_ready',
+        message: `"${video.title}" is ready to watch`,
+        data: { videoId: String(videoId) },
+      }).catch((e) => console.log('notify failed:', e.message));
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
@@ -70,9 +77,16 @@ worker.on('completed', (job) => {
 
 worker.on('failed', async (job, err) => {
   console.log(`[job ${job.id}] failed (attempt ${job.attemptsMade}):`, err.message);
-  console.log(err.stack);  
+  console.log(err.stack);
   if (job.attemptsMade >= job.opts.attempts) {
-    await Video.findByIdAndUpdate(job.data.videoId, { status: 'failed' });
+    const failedVideo = await Video.findByIdAndUpdate(job.data.videoId, { status: 'failed' });
+    if (failedVideo) {
+      await notifyUser(failedVideo.owner, {
+        type: 'video_failed',
+        message: `Processing failed for "${failedVideo.title}"`,
+        data: { videoId: String(failedVideo._id) },
+      }).catch(() => {});
+    }
     await invalidateVideo(job.data.videoId);
   }
 });
