@@ -7,7 +7,8 @@ import {
     saveProgress,
     togglePublishStatus,
     updateVideo,
-    getSearchSuggestions
+    getSearchSuggestions,
+    registerView
 } from "../controllers/video.controller.js"
 import {optionalVerifyJWT, verifyJWT} from "../middlewares/auth.middleware.js"
 import {upload} from "../middlewares/multer.middlewares.js"
@@ -42,6 +43,8 @@ router
 
 router
     .route("/:videoId/progress").put(verifyJWT, saveProgress);
+
+router.route('/:videoId/view').post(optionalVerifyJWT, registerView);
 
 router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 

@@ -5,6 +5,7 @@ import { videoApi, API_BASE_URL } from '../api/client';
 
 const SAVE_EVERY_MS = 10000;
 const MIN_SAVE_POSITION = 5;
+const VIEW_AFTER_SECONDS = 10;
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const QUALITY_KEY = 'vidtube_quality';
 
@@ -51,6 +52,9 @@ export default function VideoPlayer({
   const lastSavedAtRef = useRef(0);
   const lastPosRef = useRef(null);
   const theaterToggleRef = useRef(onToggleTheater);
+  const viewSentRef = useRef(false);
+  const watchedRef = useRef(0);
+  const lastTimeRef = useRef(null);
 
   useEffect(() => {
     theaterToggleRef.current = onToggleTheater;
@@ -248,6 +252,12 @@ export default function VideoPlayer({
     };
   }, []);
 
+  useEffect(() => {
+    viewSentRef.current = false;
+    watchedRef.current = 0;
+    lastTimeRef.current = null;
+  }, [videoId]);
+
   // progress save: unmount / video change / tab close
   useEffect(() => {
     if (!canSave || !videoId) return;
@@ -266,7 +276,7 @@ export default function VideoPlayer({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(p),
-      }).catch(() => {});
+      }).catch(() => { });
     };
 
     window.addEventListener('pagehide', onPageHide);
@@ -275,7 +285,7 @@ export default function VideoPlayer({
       window.removeEventListener('pagehide', onPageHide);
       const p = lastPosRef.current;
       if (p && p.position >= MIN_SAVE_POSITION) {
-        videoApi.saveProgress(videoId, p.position, p.duration).catch(() => {});
+        videoApi.saveProgress(videoId, p.position, p.duration).catch(() => { });
       }
     };
   }, [videoId, canSave]);
@@ -284,12 +294,26 @@ export default function VideoPlayer({
     const p = lastPosRef.current;
     if (!canSave || !videoId || !p || p.position < MIN_SAVE_POSITION) return;
     lastSavedAtRef.current = Date.now();
-    videoApi.saveProgress(videoId, p.position, p.duration).catch(() => {});
+    videoApi.saveProgress(videoId, p.position, p.duration).catch(() => { });
   };
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
     if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    if (!viewSentRef.current && videoId) {
+      const t = v.currentTime;
+      if (lastTimeRef.current !== null) {
+        const delta = t - lastTimeRef.current;
+        if (delta > 0 && delta < 1.5) watchedRef.current += delta;
+      }
+      lastTimeRef.current = t;
+
+      const needed = Math.min(VIEW_AFTER_SECONDS, v.duration * 0.5);
+      if (watchedRef.current >= needed) {
+        viewSentRef.current = true;
+        videoApi.registerView(videoId).catch(() => { });
+      }
+    }
     lastPosRef.current = {
       position: Math.floor(v.currentTime),
       duration: Math.floor(v.duration),
@@ -326,9 +350,8 @@ export default function VideoPlayer({
     <div
       ref={containerRef}
       onMouseLeave={() => setShowQuality(false)}
-      className={`group relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ${
-        theater ? 'lg:max-h-[75vh]' : ''
-      }`}
+      className={`group relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-zinc-800 ${theater ? 'lg:max-h-[75vh]' : ''
+        }`}
     >
       <video
         ref={videoRef}

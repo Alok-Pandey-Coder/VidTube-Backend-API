@@ -153,7 +153,11 @@ export const videoApi = {
   suggest: async (q, signal) => {
     const res = await api.get('/videos/suggest', { params: { q }, signal });
     return res.data;
-  }
+  },
+  registerView: async (videoId) => {
+    const res = await api.post(`/videos/${videoId}/view`);
+    return res.data;
+  },
 };
 
 export const commentApi = {
