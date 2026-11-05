@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  BarChart3, 
-  Users, 
-  Eye, 
-  ThumbsUp, 
-  Film, 
-  Plus, 
-  Trash2, 
-  ToggleLeft, 
-  ToggleRight, 
+import {
+  BarChart3,
+  Users,
+  Eye,
+  ThumbsUp,
+  Film,
+  Plus,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
   ExternalLink,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  RotateCw
 } from 'lucide-react';
 import { dashboardApi, videoApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatDuration, formatViews, timeAgo } from '../utils/formatters';
+import ViewsChart from '../components/ViewCharts';
 
 export default function DashboardPage({ onOpenUpload }) {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -26,6 +28,10 @@ export default function DashboardPage({ onOpenUpload }) {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [days, setDays] = useState(28);
+  const [analytics, setAnalytics] = useState(null);
+  const [chartLoading, setChartLoading] = useState(true);
 
   const fetchDashboardData = async () => {
     if (!user?._id) return;
@@ -60,6 +66,43 @@ export default function DashboardPage({ onOpenUpload }) {
     }
   }, [user, isAuthenticated, authLoading]);
 
+  useEffect(() => {
+    if (!user?._id) return;
+    let cancelled = false;
+    setChartLoading(true);
+
+    dashboardApi
+      .getAnalytics(days)
+      .then((res) => {
+        if (!cancelled) setAnalytics(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setAnalytics(null);
+      })
+      .finally(() => {
+        if (!cancelled) setChartLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?._id, days]);
+
+  const hasPending = videos.some((v) => v.status === 'uploaded' || v.status === 'processing');
+
+  useEffect(() => {
+    if (!hasPending || !user?._id) return;
+    const t = setInterval(async () => {
+      try {
+        const res = await dashboardApi.getChannelVideos(user._id);
+        setVideos(res.data || []);
+      } catch {
+        // next tick retry
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [hasPending, user?._id]);
+
   const handleDelete = async (videoId) => {
     if (!window.confirm('Are you sure you want to delete this video? This cannot be undone.')) return;
     try {
@@ -79,6 +122,15 @@ export default function DashboardPage({ onOpenUpload }) {
     }
   };
 
+  const handleRetry = async (videoId) => {
+    try {
+      await videoApi.retryProcessing(videoId);
+      await fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to retry');
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -86,6 +138,11 @@ export default function DashboardPage({ onOpenUpload }) {
       </div>
     );
   }
+
+  // NEW: period comparison
+  const prev = analytics?.previousViews || 0;
+  const cur = analytics?.periodViews || 0;
+  const delta = prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-8">
@@ -163,6 +220,81 @@ export default function DashboardPage({ onOpenUpload }) {
         </div>
       </div>
 
+      {/* NEW: Views chart + top videos */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 p-5 bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-zinc-400">Views, last {days} days</p>
+              <p className="text-2xl font-black text-white">
+                {cur.toLocaleString()}
+                {delta !== null && (
+                  <span
+                    className={`ml-2 text-xs font-semibold ${delta >= 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                  >
+                    {delta >= 0 ? '+' : ''}
+                    {delta}% vs previous {days} days
+                  </span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex gap-1.5">
+              {[7, 28, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${days === d
+                    ? 'bg-white text-zinc-950'
+                    : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                    }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {chartLoading ? (
+            <div className="h-64 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-red-500" />
+            </div>
+          ) : !analytics || cur === 0 ? (
+            <div className="h-64 flex items-center justify-center text-xs text-zinc-500">
+              No views in this period yet
+            </div>
+          ) : (
+            <ViewsChart data={analytics.daily} />
+          )}
+        </div>
+
+        <div className="p-5 bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-3">
+          <p className="text-sm font-semibold text-white">Top videos</p>
+          {analytics?.topVideos?.length ? (
+            analytics.topVideos.map((v) => (
+              <Link
+                key={v._id}
+                to={`/watch/${v._id}`}
+                className="flex items-center gap-3 hover:bg-zinc-800/60 rounded-xl p-1.5 transition"
+              >
+                <img
+                  src={v.thumbnail}
+                  alt={v.title}
+                  className="w-16 h-10 rounded-lg object-cover bg-zinc-800 shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white truncate">{v.title}</p>
+                  <p className="text-xs text-zinc-500">{formatViews(v.views)}</p>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <p className="text-xs text-zinc-500">Nothing to show yet</p>
+          )}
+        </div>
+      </div>
+
       {/* Videos Management Table */}
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-white">Your Videos</h2>
@@ -197,6 +329,18 @@ export default function DashboardPage({ onOpenUpload }) {
                 {videos.map((v) => {
                   const vidId = v._id || v.id;
                   const isPublished = v.isPublished !== false;
+                  const status = v.status || 'ready';
+                  const badge =
+                    status === 'failed'
+                      ? { label: 'Failed', cls: 'bg-red-500/10 text-red-400 border border-red-500/20' }
+                      : status === 'uploaded' || status === 'processing'
+                        ? {
+                          label: status === 'uploaded' ? 'Queued' : 'Processing',
+                          cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+                        }
+                        : isPublished
+                          ? { label: 'Published', cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' }
+                          : { label: 'Private / Draft', cls: 'bg-zinc-800 text-zinc-400' };
 
                   return (
                     <tr key={vidId} className="hover:bg-zinc-800/40 transition">
@@ -227,14 +371,8 @@ export default function DashboardPage({ onOpenUpload }) {
                       </td>
 
                       <td className="px-5 py-4">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            isPublished
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-zinc-800 text-zinc-400'
-                          }`}
-                        >
-                          {isPublished ? 'Published' : 'Private / Draft'}
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${badge.cls}`}>
+                          {badge.label}
                         </span>
                       </td>
 
@@ -255,6 +393,16 @@ export default function DashboardPage({ onOpenUpload }) {
                           >
                             <ExternalLink className="w-4 h-4" />
                           </Link>
+
+                          {status === 'failed' && (
+                            <button
+                              onClick={() => handleRetry(vidId)}
+                              className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition"
+                              title="Retry processing"
+                            >
+                              <RotateCw className="w-4 h-4" />
+                            </button>
+                          )}
 
                           <button
                             onClick={() => handleTogglePublish(vidId)}

@@ -14,6 +14,7 @@ import { Like } from '../models/like.models.js';
 import { Subscription } from '../models/subscription.models.js';
 import { WatchProgress } from '../models/watchProgress.models.js';
 import { WatchLater } from '../models/watchLater.models.js';
+import { VideoDailyStat } from '../models/videoDailyStat.models.js';
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
@@ -495,6 +496,48 @@ const saveProgress = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, {}, 'Progress saved'))
 })
 
+const registerView = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(videoId)) {
+    throw new ApiError(400, 'Video id is invalid');
+  }
+
+  const video = await Video.findOne({ _id: videoId, isPublished: true })
+    .select('owner')
+    .lean();
+  if (!video) throw new ApiError(404, 'Video not found');
+
+  const userId = req.user?._id ? String(req.user._id) : null;
+  if (userId && userId === String(video.owner)) {
+    return res.status(200).json(new ApiResponse(200, { counted: false }, 'Owner view ignored'));
+  }
+
+  const key = `view:${videoId}:${userId || `ip:${req.ip}`}`;
+  const first = await connection.set(key, '1', 'EX', 1800, 'NX');
+  if (!first) {
+    return res.status(200).json(new ApiResponse(200, { counted: false }, 'Already counted'));
+  }
+
+  const day = new Date();
+  day.setUTCHours(0, 0, 0, 0);
+
+  try {
+    await Promise.all([
+      Video.updateOne({ _id: videoId }, { $inc: { views: 1 } }),
+      VideoDailyStat.updateOne(
+        { video: videoId, channel: video.owner, day },
+        { $inc: { views: 1 } },
+        { upsert: true },
+      ),
+    ]);
+  } catch (err) {
+    await connection.del(key);   // DB fail hua to dedupe key hata do, taaki retry me gina jaye
+    throw err;
+  }
+
+  return res.status(200).json(new ApiResponse(200, { counted: true }, 'View counted'));
+});
+
 const getWatchHistory = asyncHandler(async (req, res) => {
   let {cursor, limit = 12} = req.query
   limit = Math.min(Math.max(parseInt(limit) || 12, 1), 50);
@@ -578,4 +621,90 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   );
 })
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions };
+const retryProcessing = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, 'Video id is invalid');
+
+  const video = await Video.findOneAndUpdate(
+    { _id: videoId, owner: req.user._id, status: 'failed' },
+    { $set: { status: 'uploaded' } },
+  );
+  if (!video) throw new ApiError(404, 'Video not found or not in failed state');
+
+  const jobId = String(videoId);
+  try {
+    const old = await videoQueue.getJob(jobId);
+    if (old) await old.remove();
+    await videoQueue.add('process', { videoId: jobId }, { jobId });
+  } catch (err) {
+    await Video.updateOne({ _id: videoId }, { $set: { status: 'failed' } });
+    throw new ApiError(500, 'Could not queue video again');
+  }
+
+  await invalidateVideo(videoId);
+  return res.status(200).json(new ApiResponse(200, {}, 'Processing restarted'));
+});
+
+const getRelatedVideos = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, 'Video id is invalid');
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 20);
+
+  const data = await cached(`related:${videoId}:${limit}`, 120, async () => {
+    const base = await Video.findById(videoId).select('title description owner').lean();
+    if (!base) return null;
+
+    const baseFilters = {
+      isPublished: true,
+      status: { $nin: ['uploaded', 'processing', 'failed'] },
+      _id: { $ne: base._id },
+    };
+
+    const [similar, sameOwner] = await Promise.all([
+      Video.aggregate([
+        {
+          $search: {
+            index: 'videos_search',
+            moreLikeThis: { like: [{ title: base.title, description: base.description }] },
+          },
+        },
+        { $match: baseFilters },
+        { $limit: limit },
+        ...ownerStages,
+      ]),
+      Video.aggregate([
+        { $match: { ...baseFilters, owner: base.owner } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 4 },
+        ...ownerStages,
+      ]),
+    ]);
+
+    const seen = new Set();
+    const out = [];
+    for (const v of [...similar, ...sameOwner]) {
+      const id = String(v._id);
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push(v);
+      }
+    }
+
+    if (out.length < limit) {
+      const fill = await Video.aggregate([
+        { $match: { ...baseFilters, _id: { $nin: [base._id, ...out.map((v) => v._id)] } } },
+        { $sort: { views: -1, createdAt: -1 } },
+        { $limit: limit - out.length },
+        ...ownerStages,
+      ]);
+      out.push(...fill);
+    }
+
+    return out.slice(0, limit);
+  });
+
+  if (!data) throw new ApiError(404, 'Video not found');
+  return res.status(200).json(new ApiResponse(200, data, 'Related videos fetched'));
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing, getRelatedVideos};

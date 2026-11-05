@@ -70,11 +70,11 @@ export default function WatchPage() {
         setLikesCount(videoData.likesCount || 0);
 
         // Fetch related/recommended videos
-        const recRes = await videoApi.getAllVideos({ limit: 8 });
-        const list = (recRes.data?.data || recRes.data || []).filter(
-          (v) => (v._id || v.id) !== videoId
-        );
-        setRecommended(list);
+        // const recRes = await videoApi.getAllVideos({ limit: 8 });
+        // const list = (recRes.data?.data || recRes.data || []).filter(
+        //   (v) => (v._id || v.id) !== videoId
+        // );
+        // setRecommended(list);
       } catch (err) {
         console.error('Failed to load video details', err);
         setError(err.response?.data?.message || 'Video not found or server error');
@@ -85,6 +85,20 @@ export default function WatchPage() {
 
     fetchVideoDetails();
     window.scrollTo(0, 0);
+  }, [videoId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRecommended([]);
+    videoApi
+      .getRelated(videoId, 10)
+      .then((res) => {
+        if (!cancelled) setRecommended(res.data || []);
+      })
+      .catch(() => { });
+    return () => {
+      cancelled = true;
+    };
   }, [videoId]);
 
   const handleToggleLike = async () => {
@@ -324,9 +338,8 @@ export default function WatchPage() {
 
         {/* 3) Up Next: normal me player ke saath right column, theater me details ke neeche-side me */}
         <div
-          className={`space-y-4 ${
-            theater ? '' : 'lg:col-start-3 xl:col-start-4 lg:row-start-1 lg:row-span-2'
-          }`}
+          className={`space-y-4 ${theater ? '' : 'lg:col-start-3 xl:col-start-4 lg:row-start-1 lg:row-span-2'
+            }`}
         >
           <h3 className="font-bold text-sm text-zinc-300 uppercase tracking-wider">
             Up Next
