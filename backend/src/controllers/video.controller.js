@@ -621,4 +621,28 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   );
 })
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView };
+const retryProcessing = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, 'Video id is invalid');
+
+  const video = await Video.findOneAndUpdate(
+    { _id: videoId, owner: req.user._id, status: 'failed' },
+    { $set: { status: 'uploaded' } },
+  );
+  if (!video) throw new ApiError(404, 'Video not found or not in failed state');
+
+  const jobId = String(videoId);
+  try {
+    const old = await videoQueue.getJob(jobId);
+    if (old) await old.remove();
+    await videoQueue.add('process', { videoId: jobId }, { jobId });
+  } catch (err) {
+    await Video.updateOne({ _id: videoId }, { $set: { status: 'failed' } });
+    throw new ApiError(500, 'Could not queue video again');
+  }
+
+  await invalidateVideo(videoId);
+  return res.status(200).json(new ApiResponse(200, {}, 'Processing restarted'));
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing};

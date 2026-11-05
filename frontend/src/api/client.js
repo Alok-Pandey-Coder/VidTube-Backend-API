@@ -158,6 +158,7 @@ export const videoApi = {
     const res = await api.post(`/videos/${videoId}/view`);
     return res.data;
   },
+  retryProcessing: async (videoId) => (await api.post(`/videos/${videoId}/retry`)).data,
 };
 
 export const commentApi = {
@@ -281,6 +282,10 @@ export const dashboardApi = {
       }
       throw err;
     }
+  }, 
+  getAnalytics: async (days = 28) => {
+    const res = await api.get('/dashboard/analytics', { params: { days } });
+    return res.data;
   },
 };
 

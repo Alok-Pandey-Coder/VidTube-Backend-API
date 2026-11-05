@@ -5,6 +5,10 @@ import {Like} from "../models/like.models.js"
 import {ApiError} from "../utils/ApiError.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import {asyncHandler} from "../utils/asyncHandler.js"
+import {VideoDailyStat} from "../models/videoDailyStat.models.js"
+import {cached} from "../utils/cache.js"
+
+const RANGES = [7, 28, 90];
 
 const getChannelStats = asyncHandler(async (req, res) => {
 
@@ -110,11 +114,16 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     throw new ApiError(400, "channelId is invalid");
   }
 
+  const isOwner = req.user && String(req.user._id) === channelId;
+  const ownerId = new mongoose.Types.ObjectId(channelId);
+
+  const filter = isOwner 
+  ? { owner: ownerId }
+  : { owner: ownerId, isPublished: true, status: { $nin: ['uploaded', 'processing', 'failed'] } };
+
   const videos = await Video.aggregate([
     {
-      $match: {
-        owner: new mongoose.Types.ObjectId(channelId)
-      }
+      $match: filter
     },
     {
       $project: {
@@ -124,7 +133,9 @@ const getChannelVideos = asyncHandler(async (req, res) => {
         description: 1,
         views: 1,
         duration: 1,
-        createdAt: 1
+        createdAt: 1,
+        isPublished: 1,
+        status: 1
       }
     },
     {
@@ -142,7 +153,62 @@ const getChannelVideos = asyncHandler(async (req, res) => {
 
 });
 
+const getChannelAnalytics = asyncHandler(async (req, res) => {
+  const requested = parseInt(req.query.days);
+  const days = RANGES.includes(requested) ? requested : 28;
+  const channel = req.user._id;
+
+  const end = new Date();
+  end.setUTCHours(0, 0, 0, 0);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  const prevStart = new Date(start);
+  prevStart.setUTCDate(prevStart.getUTCDate() - days);
+
+  const data = await cached(`analytics:${channel}:${days}`, 60, async () => {
+    const [series, previous, topVideos] = await Promise.all([
+      VideoDailyStat.aggregate([
+        { $match: { channel, day: { $gte: start, $lte: end } } },
+        { $group: { _id: "$day", views: { $sum: "$views" } } },
+      ]),
+      VideoDailyStat.aggregate([
+        { $match: { channel, day: { $gte: prevStart, $lt: start } } },
+        { $group: { _id: null, views: { $sum: "$views" } } },
+      ]),
+      VideoDailyStat.aggregate([
+        { $match: { channel, day: { $gte: start, $lte: end } } },
+        { $group: { _id: "$video", views: { $sum: "$views" } } },
+        { $sort: { views: -1 } },
+        { $limit: 5 },
+        { $lookup: { from: "videos", localField: "_id", foreignField: "_id", as: "video" } },
+        { $unwind: "$video" },
+        { $project: { views: 1, title: "$video.title", thumbnail: "$video.thumbnail" } },
+      ]),
+    ]);
+
+    const byDay = new Map(series.map((s) => [s._id.toISOString().slice(0, 10), s.views]));
+    const daily = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setUTCDate(start.getUTCDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      daily.push({ date: key, views: byDay.get(key) || 0 });
+    }
+
+    return {
+      days,
+      daily,
+      periodViews: daily.reduce((sum, d) => sum + d.views, 0),
+      previousViews: previous[0]?.views || 0,
+      topVideos,
+    };
+  });
+
+  return res.status(200).json(new ApiResponse(200, data, "Analytics fetched successfully"));
+});
+
 export {
     getChannelStats, 
-    getChannelVideos
+    getChannelVideos,
+    getChannelAnalytics
     }
