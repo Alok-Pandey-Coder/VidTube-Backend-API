@@ -1,25 +1,25 @@
-import axios from 'axios';
+import axios from "axios";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true, // For cookies if supported
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
 // Attach JWT access token to every request if available
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('vidtube_token');
+    const token = localStorage.getItem("vidtube_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
 );
 
 // Response interceptor for automatic token refresh
@@ -27,82 +27,82 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
     // Check if error is 401 and request hasn't been retried yet
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/users/login') &&
-      !originalRequest.url?.includes('/users/register') &&
-      !originalRequest.url?.includes('/users/refresh-token')
+      !originalRequest.url?.includes("/users/login") &&
+      !originalRequest.url?.includes("/users/register") &&
+      !originalRequest.url?.includes("/users/refresh-token")
     ) {
       originalRequest._retry = true;
       try {
         const refreshRes = await axios.post(
           `${API_BASE_URL}/users/refresh-token`,
           {},
-          { withCredentials: true }
+          { withCredentials: true },
         );
         const newAccessToken = refreshRes.data?.data?.accessToken;
         if (newAccessToken) {
-          localStorage.setItem('vidtube_token', newAccessToken);
+          localStorage.setItem("vidtube_token", newAccessToken);
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           return api(originalRequest);
         }
       } catch (refreshErr) {
         // Refresh failed, clear session
-        localStorage.removeItem('vidtube_token');
-        localStorage.removeItem('vidtube_user');
-        window.dispatchEvent(new Event('vidtube_auth_logout'));
+        localStorage.removeItem("vidtube_token");
+        localStorage.removeItem("vidtube_user");
+        window.dispatchEvent(new Event("vidtube_auth_logout"));
       }
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 // --- API Service Methods ---
 
 export const authApi = {
   login: async (credentials) => {
-    const res = await api.post('/users/login', credentials);
+    const res = await api.post("/users/login", credentials);
     return res.data;
   },
   register: async (formData) => {
-    const res = await api.post('/users/register', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const res = await api.post("/users/register", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
   },
   logout: async () => {
-    const res = await api.post('/users/logout');
+    const res = await api.post("/users/logout");
     return res.data;
   },
   getCurrentUser: async () => {
-    const res = await api.get('/users/current-user');
+    const res = await api.get("/users/current-user");
     return res.data;
   },
   changePassword: async (passwords) => {
-    const res = await api.post('/users/change-password', passwords);
+    const res = await api.post("/users/change-password", passwords);
     return res.data;
   },
   updateAccount: async (data) => {
-    const res = await api.patch('/users/update-account', data);
+    const res = await api.patch("/users/update-account", data);
     return res.data;
   },
   updateAvatar: async (formData) => {
-    const res = await api.patch('/users/avatar', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const res = await api.patch("/users/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
   },
   updateCoverImage: async (formData) => {
-    const res = await api.patch('/users/cover-image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const res = await api.patch("/users/cover-image", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
   },
   getWatchHistory: async (params = {}) => {
-    const res = await api.get('/users/history', { params });
+    const res = await api.get("/users/history", { params });
     return res.data;
   },
   getUserProfile: async (username) => {
@@ -113,7 +113,7 @@ export const authApi = {
 
 export const videoApi = {
   getAllVideos: async (params = {}) => {
-    const res = await api.get('/videos', { params });
+    const res = await api.get("/videos", { params });
     return res.data;
   },
   getVideoById: async (videoId) => {
@@ -121,11 +121,13 @@ export const videoApi = {
     return res.data;
   },
   publishVideo: async (formData, onProgress) => {
-    const res = await api.post('/videos', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const res = await api.post("/videos", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
-          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          const percent = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total,
+          );
           onProgress(percent);
         }
       },
@@ -134,7 +136,7 @@ export const videoApi = {
   },
   updateVideo: async (videoId, formData) => {
     const res = await api.patch(`/videos/${videoId}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
   },
@@ -147,18 +149,24 @@ export const videoApi = {
     return res.data;
   },
   saveProgress: async (videoId, position, duration) => {
-    const res = await api.put(`/videos/${videoId}/progress`, {position, duration});
+    const res = await api.put(`/videos/${videoId}/progress`, {
+      position,
+      duration,
+    });
     return res.data;
   },
   suggest: async (q, signal) => {
-    const res = await api.get('/videos/suggest', { params: { q }, signal });
+    const res = await api.get("/videos/suggest", { params: { q }, signal });
     return res.data;
   },
   registerView: async (videoId) => {
     const res = await api.post(`/videos/${videoId}/view`);
     return res.data;
   },
-  retryProcessing: async (videoId) => (await api.post(`/videos/${videoId}/retry`)).data,
+  retryProcessing: async (videoId) =>
+    (await api.post(`/videos/${videoId}/retry`)).data,
+  getRelated: async (videoId, limit = 10) =>
+    (await api.get(`/videos/${videoId}/related`, { params: { limit } })).data,
 };
 
 export const commentApi = {
@@ -195,7 +203,7 @@ export const likeApi = {
   },
   getLikedVideos: async () => {
     try {
-      const res = await api.get('/likes/videos');
+      const res = await api.get("/likes/videos");
       return res.data;
     } catch (err) {
       if (err.response?.status === 400 || err.response?.status === 404) {
@@ -223,7 +231,7 @@ export const subscriptionApi = {
 
 export const tweetApi = {
   createTweet: async (content) => {
-    const res = await api.post('/tweet', { content });
+    const res = await api.post("/tweet", { content });
     return res.data;
   },
   getUserTweets: async (userId) => {
@@ -242,7 +250,7 @@ export const tweetApi = {
 
 export const playlistApi = {
   createPlaylist: async (data) => {
-    const res = await api.post('/playlist', data);
+    const res = await api.post("/playlist", data);
     return res.data;
   },
   getPlaylistById: async (playlistId) => {
@@ -282,9 +290,9 @@ export const dashboardApi = {
       }
       throw err;
     }
-  }, 
+  },
   getAnalytics: async (days = 28) => {
-    const res = await api.get('/dashboard/analytics', { params: { days } });
+    const res = await api.get("/dashboard/analytics", { params: { days } });
     return res.data;
   },
 };
@@ -299,18 +307,18 @@ export const watchLaterApi = {
     return res.data;
   },
   list: async (params = {}) => {
-    const res = await api.get('/watch-later', { params });
+    const res = await api.get("/watch-later", { params });
     return res.data;
   },
 };
 
 export const notificationApi = {
   list: async () => {
-    const res = await api.get('/notifications');
+    const res = await api.get("/notifications");
     return res.data;
   },
   markAllRead: async () => {
-    const res = await api.patch('/notifications/read-all');
+    const res = await api.patch("/notifications/read-all");
     return res.data;
   },
 };

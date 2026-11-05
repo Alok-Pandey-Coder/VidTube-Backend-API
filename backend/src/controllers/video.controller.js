@@ -645,4 +645,66 @@ const retryProcessing = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, {}, 'Processing restarted'));
 });
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing};
+const getRelatedVideos = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, 'Video id is invalid');
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 20);
+
+  const data = await cached(`related:${videoId}:${limit}`, 120, async () => {
+    const base = await Video.findById(videoId).select('title description owner').lean();
+    if (!base) return null;
+
+    const baseFilters = {
+      isPublished: true,
+      status: { $nin: ['uploaded', 'processing', 'failed'] },
+      _id: { $ne: base._id },
+    };
+
+    const [similar, sameOwner] = await Promise.all([
+      Video.aggregate([
+        {
+          $search: {
+            index: 'videos_search',
+            moreLikeThis: { like: [{ title: base.title, description: base.description }] },
+          },
+        },
+        { $match: baseFilters },
+        { $limit: limit },
+        ...ownerStages,
+      ]),
+      Video.aggregate([
+        { $match: { ...baseFilters, owner: base.owner } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 4 },
+        ...ownerStages,
+      ]),
+    ]);
+
+    const seen = new Set();
+    const out = [];
+    for (const v of [...similar, ...sameOwner]) {
+      const id = String(v._id);
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push(v);
+      }
+    }
+
+    if (out.length < limit) {
+      const fill = await Video.aggregate([
+        { $match: { ...baseFilters, _id: { $nin: [base._id, ...out.map((v) => v._id)] } } },
+        { $sort: { views: -1, createdAt: -1 } },
+        { $limit: limit - out.length },
+        ...ownerStages,
+      ]);
+      out.push(...fill);
+    }
+
+    return out.slice(0, limit);
+  });
+
+  if (!data) throw new ApiError(404, 'Video not found');
+  return res.status(200).json(new ApiResponse(200, data, 'Related videos fetched'));
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing, getRelatedVideos};
