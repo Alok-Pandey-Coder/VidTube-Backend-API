@@ -14,6 +14,12 @@ import { notifyUser } from '../services/notify.js';
 import { transcribeAudio, toVtt } from '../services/transcribe.js';
 import { Transcript } from '../src/models/transcript.models.js';
 import { generateInsights } from '../services/llm.js';
+import * as Sentry from '@sentry/node';
+import { logger } from '../src/utils/logger.js';
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development' });
+}
 
 await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
 console.log('Worker: DB connected', mongoose.connection.name);
@@ -122,7 +128,8 @@ worker.on('completed', (job) => {
 });
 
 worker.on('failed', async (job, err) => {
-  console.log(`[job ${job.id}] failed (attempt ${job.attemptsMade}):`, err.message);
+    logger.error({ err, jobId: job.id, videoId: job.data.videoId, attempt: job.attemptsMade }, 'video job failed');
+  Sentry.captureException(err, { extra: { jobId: job.id, videoId: job.data.videoId } });
   console.log(err.stack);
   if (job.attemptsMade >= job.opts.attempts) {
     const failedVideo = await Video.findByIdAndUpdate(job.data.videoId, { status: 'failed' });

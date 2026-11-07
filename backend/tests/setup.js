@@ -1,3 +1,5 @@
+process.env.LOG_LEVEL = 'silent';
+
 import { beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
