@@ -10,14 +10,15 @@ import {
   Plus,
   Eye,
   Calendar,
-  Clock
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { videoApi, likeApi, subscriptionApi, watchLaterApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import CommentSection from '../components/CommentSection';
 import VideoCard from '../components/VideoCard';
-import { formatViews, timeAgo } from '../utils/formatters';
+import { formatViews, timeAgo, formatDuration } from '../utils/formatters';
 import TranscriptPanel from '../components/TranscriptPanel';
 
 const THEATER_KEY = 'vidtube_theater';
@@ -221,7 +222,7 @@ export default function WatchPage() {
             canSave={isAuthenticated}
             theater={theater}
             onToggleTheater={toggleTheater}
-            captionsUrl={video.captionsKey ? `/media/${video.captionsKey}` : null}   // 👈 new
+            captionsUrl={video.captionsKey ? `/media/${video.captionsKey}` : null} 
   captionsLang={video.captionsLang}
             playerApiRef={playerApiRef}
           />
@@ -334,6 +335,48 @@ export default function WatchPage() {
               >
                 {descExpanded ? 'Show less' : '...more'}
               </button>
+            )}
+
+                        {video.aiSummary && (
+              <div className="mt-3 pt-3 border-t border-zinc-800">
+                <p className="text-xs font-semibold text-zinc-400 mb-1 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-red-500" /> AI summary
+                </p>
+                <p className="text-zinc-300 leading-relaxed">{video.aiSummary}</p>
+              </div>
+            )}
+
+            {video.chapters?.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-zinc-800 space-y-1">
+                <p className="text-xs font-semibold text-zinc-400 mb-1">Chapters</p>
+                {video.chapters.map((c) => (
+                  <button
+                    key={c.start}
+                    onClick={() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      playerApiRef.current?.seek(c.start);
+                    }}
+                    className="w-full flex gap-3 text-left text-xs px-2 py-1.5 rounded-lg hover:bg-zinc-800 transition"
+                  >
+                    <span className="shrink-0 w-12 text-red-400">{formatDuration(c.start)}</span>
+                    <span className="text-zinc-300">{c.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {video.tags?.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {video.tags.map((tag) => (
+                  <Link
+                    key={tag}
+                    to={`/?query=${encodeURIComponent(tag)}`}
+                    className="px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 transition"
+                  >
+                    #{tag}
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
 

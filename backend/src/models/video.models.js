@@ -60,6 +60,9 @@ const videoSchema = new Schema(
     },
     captionsKey: { type: String },
     captionsLang: { type: String },
+    aiSummary: { type: String },
+    chapters: [{ _id: false, start: Number, title: String }],
+    tags: [String],
   },
   { timestamps: true },
 );
