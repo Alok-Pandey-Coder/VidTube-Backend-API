@@ -35,6 +35,8 @@ export default function VideoPlayer({
   canSave = false,
   theater = false,
   onToggleTheater,
+  captionsUrl,
+  captionsLang
 }) {
   const [error, setError] = useState(false);
   const [toast, setToast] = useState('');
@@ -224,6 +226,16 @@ export default function VideoPlayer({
           e.preventDefault();
           togglePictureInPicture(v);
           break;
+        case 'c':
+        case 'C': {
+          e.preventDefault();
+          const tr = v.textTracks[0];
+          if (tr) {
+            tr.mode = tr.mode === 'showing' ? 'hidden' : 'showing';
+            showToast(tr.mode === 'showing' ? 'Captions on' : 'Captions off');
+          }
+          break;
+        }
         case '>': {
           const next = SPEEDS.find((s) => s > v.playbackRate) ?? SPEEDS[SPEEDS.length - 1];
           v.playbackRate = next;
@@ -366,6 +378,15 @@ export default function VideoPlayer({
         onPause={saveNow}
         onEnded={saveNow}
       >
+      {captionsUrl && (
+          <track
+            key={captionsUrl}
+            kind="subtitles"
+            src={captionsUrl}
+            srcLang={captionsLang || 'en'}
+            label="Captions"
+          />
+        )}
         Your browser does not support the video tag.
       </video>
 

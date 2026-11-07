@@ -95,3 +95,7 @@ export async function createPreview(inputPath, outPath, startSec = 0) {
     outPath,
   ]);
 }
+
+export async function extractAudio(inputPath, outPath) {
+  await run("ffmpeg", ["-y", "-i", inputPath, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", outPath]);
+}

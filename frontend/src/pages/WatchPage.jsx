@@ -207,7 +207,7 @@ export default function WatchPage() {
 
   return (
     <div className="max-w-[1700px] mx-auto p-4 lg:p-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-4 lg:grid-rows-[auto_1fr] lg:items-start">
         {/* 1) Player: theater me poori width, normal me left columns */}
         <div className={theater ? 'col-span-full' : 'lg:col-span-2 xl:col-span-3'}>
           <VideoPlayer
@@ -219,6 +219,8 @@ export default function WatchPage() {
             canSave={isAuthenticated}
             theater={theater}
             onToggleTheater={toggleTheater}
+            captionsUrl={video.captionsKey ? `/media/${video.captionsKey}` : null}   // 👈 new
+  captionsLang={video.captionsLang}
           />
         </div>
 

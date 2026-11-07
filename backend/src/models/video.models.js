@@ -1,4 +1,4 @@
-import mongoose, {Schema} from "mongoose";
+import mongoose, { Schema } from 'mongoose';
 
 const videoSchema = new Schema(
   {
@@ -16,13 +16,13 @@ const videoSchema = new Schema(
     },
     storageProvider: {
       type: String,
-      enum: ["cloudinary", "local", "s3"],
-      default: "cloudinary",     // purane videos automatically "cloudinary" maane jayenge
+      enum: ['cloudinary', 'local', 's3'],
+      default: 'cloudinary', // purane videos automatically "cloudinary" maane jayenge
     },
     status: {
       type: String,
-      enum: ["uploaded", "processing", "ready", "failed"],
-      default: "ready",          // purane videos already ready hain
+      enum: ['uploaded', 'processing', 'ready', 'failed'],
+      default: 'ready', // purane videos already ready hain
     },
     //hlskey addition for hls support
     hlsKey: {
@@ -33,7 +33,7 @@ const videoSchema = new Schema(
     },
     thumbnail: {
       type: String,
-      required: true
+      required: true,
     },
     title: {
       type: String,
@@ -44,9 +44,9 @@ const videoSchema = new Schema(
       required: true,
     },
     views: {
-      type: Number, 
-      default: 0
-    }, 
+      type: Number,
+      default: 0,
+    },
     duration: {
       type: Number,
     },
@@ -56,12 +56,14 @@ const videoSchema = new Schema(
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: "User"
-    }
-  },{timestamps: true,}
-)
+      ref: 'User',
+    },
+    captionsKey: { type: String },
+    captionsLang: { type: String },
+  },
+  { timestamps: true },
+);
 
 videoSchema.index({ isPublished: 1, createdAt: -1, _id: -1 });
 
-
-export const Video = mongoose.model("Video", videoSchema)
+export const Video = mongoose.model('Video', videoSchema);

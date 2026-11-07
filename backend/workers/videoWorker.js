@@ -8,9 +8,16 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import { getFilePath, saveHlsOutput } from '../services/storage.js';
-import { probeVideo, transcodeTOHls, createPreview } from '../services/ffmpeg.js';
+import {
+  probeVideo,
+  transcodeTOHls,
+  createPreview,
+  extractAudio,
+} from '../services/ffmpeg.js';
 import { invalidateVideo } from '../src/utils/cache.js';
 import { notifyUser } from '../services/notify.js';
+import { transcribeAudio, toVtt } from '../services/transcribe.js';
+import { Transcript } from '../src/models/transcript.models.js';
 
 await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
 console.log('Worker: DB connected', mongoose.connection.name);
@@ -62,6 +69,35 @@ const worker = new Worker(
         message: `"${video.title}" is ready to watch`,
         data: { videoId: String(videoId) },
       }).catch((e) => console.log('notify failed:', e.message));
+
+      // captions: video already playable, isliye yahan ki failure non-fatal
+      try {
+        const audioPath = path.join(tmpDir, 'audio.mp3');
+        await extractAudio(inputPath, audioPath);
+        const t = await transcribeAudio(audioPath);
+
+        if (t.segments.length) {
+          const capDir = path.join(tmpDir, 'captions-out');
+          await fs.mkdir(capDir, { recursive: true });
+          await fs.writeFile(path.join(capDir, 'captions.vtt'), toVtt(t.segments));
+          await saveHlsOutput(capDir, hlsPrefix);
+
+          await Promise.all([
+            Video.updateOne(
+              { _id: videoId },
+              { $set: { captionsKey: `${hlsPrefix}/captions.vtt`, captionsLang: t.language } },
+            ),
+            Transcript.updateOne(
+              { video: videoId },
+              { $set: { language: t.language, text: t.text, segments: t.segments } },
+              { upsert: true },
+            ),
+          ]);
+          await invalidateVideo(videoId);
+        }
+      } catch (err) {
+        console.log(`[job ${job.id}] captions skipped:`, err.message);
+      }
     } finally {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
