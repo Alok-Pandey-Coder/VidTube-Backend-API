@@ -1,0 +1,43 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    image: vidtube-backend
+    env_file: ./backend/.env
+    environment:
+      PORT: 8000
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./backend/storage:/app/storage
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: vidtube-backend
+    command: ["node", "workers/videoWorker.js"]
+    env_file: ./backend/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./backend/storage:/app/storage
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
