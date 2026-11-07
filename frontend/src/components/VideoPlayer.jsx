@@ -36,7 +36,8 @@ export default function VideoPlayer({
   theater = false,
   onToggleTheater,
   captionsUrl,
-  captionsLang
+  captionsLang,
+  playerApiRef
 }) {
   const [error, setError] = useState(false);
   const [toast, setToast] = useState('');
@@ -151,6 +152,22 @@ export default function VideoPlayer({
       // storage unavailable, preference just won't persist
     }
   };
+
+  useEffect(() => {
+  if (!playerApiRef) return;
+  playerApiRef.current = {
+    getVideo: () => videoRef.current,
+    seek: (t) => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.currentTime = t;
+      v.play().catch(() => {});
+    },
+  };
+  return () => {
+    playerApiRef.current = null;
+  };
+}, [playerApiRef]);
 
   // keyboard shortcuts
   useEffect(() => {

@@ -15,6 +15,7 @@ import { Subscription } from '../models/subscription.models.js';
 import { WatchProgress } from '../models/watchProgress.models.js';
 import { WatchLater } from '../models/watchLater.models.js';
 import { VideoDailyStat } from '../models/videoDailyStat.models.js';
+import {Transcript} from '../models/transcript.models.js'
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
@@ -707,4 +708,17 @@ const getRelatedVideos = asyncHandler(async (req, res) => {
   return res.status(200).json(new ApiResponse(200, data, 'Related videos fetched'));
 });
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing, getRelatedVideos};
+const getTranscript = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, 'Video id is invalid');
+
+  const visible = await Video.exists({ _id: videoId, isPublished: true });
+  if (!visible) throw new ApiError(404, 'Video not found');
+
+  const t = await Transcript.findOne({ video: videoId }).select('language segments -_id').lean();
+  return res
+    .status(200)
+    .json(new ApiResponse(200, t || { language: null, segments: [] }, 'Transcript fetched'));
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing, getRelatedVideos, getTranscript};

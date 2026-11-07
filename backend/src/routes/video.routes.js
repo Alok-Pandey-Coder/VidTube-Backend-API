@@ -9,7 +9,8 @@ import {
     updateVideo,
     getSearchSuggestions,
     registerView, retryProcessing,
-    getRelatedVideos
+    getRelatedVideos,
+    getTranscript
 } from "../controllers/video.controller.js"
 import {optionalVerifyJWT, verifyJWT} from "../middlewares/auth.middleware.js"
 import {upload} from "../middlewares/multer.middlewares.js"
@@ -50,5 +51,6 @@ router.route('/:videoId/view').post(optionalVerifyJWT, registerView);
 router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 router.route("/:videoId/retry").post(verifyJWT, retryProcessing);
 router.route("/:videoId/related").get(verifyJWT,getRelatedVideos);
+router.route("/:videoId/transcript").get(getTranscript);
 
 export default router
