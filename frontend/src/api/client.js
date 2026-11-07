@@ -167,6 +167,7 @@ export const videoApi = {
     (await api.post(`/videos/${videoId}/retry`)).data,
   getRelated: async (videoId, limit = 10) =>
     (await api.get(`/videos/${videoId}/related`, { params: { limit } })).data,
+  getTranscript: async (videoId) => (await api.get(`/videos/${videoId}/transcript`)).data,
 };
 
 export const commentApi = {
@@ -186,6 +187,7 @@ export const commentApi = {
     const res = await api.delete(`/comments/c/${commentId}`);
     return res.data;
   },
+  
 };
 
 export const likeApi = {

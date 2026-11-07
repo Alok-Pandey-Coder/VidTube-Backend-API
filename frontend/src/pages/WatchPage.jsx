@@ -18,6 +18,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import CommentSection from '../components/CommentSection';
 import VideoCard from '../components/VideoCard';
 import { formatViews, timeAgo } from '../utils/formatters';
+import TranscriptPanel from '../components/TranscriptPanel';
 
 const THEATER_KEY = 'vidtube_theater';
 
@@ -37,6 +38,7 @@ export default function WatchPage() {
   const subBusyRef = useRef(false);
   const [isWatchLater, setIsWatchLater] = useState(false);
   const wlBusyRef = useRef(false);
+  const playerApiRef = useRef(null);
 
   const [theater, setTheater] = useState(() => {
     try {
@@ -221,6 +223,7 @@ export default function WatchPage() {
             onToggleTheater={toggleTheater}
             captionsUrl={video.captionsKey ? `/media/${video.captionsKey}` : null}   // 👈 new
   captionsLang={video.captionsLang}
+            playerApiRef={playerApiRef}
           />
         </div>
 
@@ -333,6 +336,8 @@ export default function WatchPage() {
               </button>
             )}
           </div>
+
+          <TranscriptPanel videoId={videoId} playerApiRef={playerApiRef} />
 
           {/* Comments */}
           <CommentSection videoId={videoId} />
