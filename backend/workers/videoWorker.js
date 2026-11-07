@@ -8,16 +8,12 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import { getFilePath, saveHlsOutput } from '../services/storage.js';
-import {
-  probeVideo,
-  transcodeTOHls,
-  createPreview,
-  extractAudio,
-} from '../services/ffmpeg.js';
+import { probeVideo, transcodeTOHls, createPreview, extractAudio } from '../services/ffmpeg.js';
 import { invalidateVideo } from '../src/utils/cache.js';
 import { notifyUser } from '../services/notify.js';
 import { transcribeAudio, toVtt } from '../services/transcribe.js';
 import { Transcript } from '../src/models/transcript.models.js';
+import { generateInsights } from '../services/llm.js';
 
 await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
 console.log('Worker: DB connected', mongoose.connection.name);
@@ -93,6 +89,20 @@ const worker = new Worker(
               { upsert: true },
             ),
           ]);
+
+          try {
+            const ai = await generateInsights({
+              title: video.title,
+              segments: t.segments,
+              duration,
+            });
+            await Video.updateOne(
+              { _id: videoId },
+              { $set: { aiSummary: ai.summary, chapters: ai.chapters, tags: ai.tags } },
+            );
+          } catch (err) {
+            console.log(`[job ${job.id}] insights skipped:`, err.message);
+          }
           await invalidateVideo(videoId);
         }
       } catch (err) {
