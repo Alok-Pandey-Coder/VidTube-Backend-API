@@ -391,6 +391,10 @@ export const shortsApi = {
     });
     return res.data;
   },
+  /** Backward-compatible alias for upload */
+  publishShort: function (formData, onProgress) {
+    return this.upload(formData, onProgress);
+  },
   /** Toggle like on a short */
   toggleLike: async (shortId) => {
     const res = await api.post(`/shorts/${shortId}/like`);

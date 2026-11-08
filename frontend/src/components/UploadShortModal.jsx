@@ -85,7 +85,11 @@ export default function UploadShortModal({ isOpen, onClose, onSuccess }) {
       onClose();
     } catch (err) {
       console.error('Short upload failed', err);
-      setError(err.response?.data?.message || 'Failed to upload short. Please try again.');
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          'Failed to upload short. Please try again.'
+      );
       setIsUploading(false);
     }
   };

@@ -19,10 +19,19 @@ dotenv.config()
         }
       )
       console.log("File uploaded on cloudinary. File src: " + response.url)
-      fs.unlinkSync(localFilePath)
+      if (fs.existsSync(localFilePath)) {
+        fs.unlinkSync(localFilePath)
+      }
       return response
     } catch (error) {
-      fs.unlinkSync(localFilePath)
+      console.error("Cloudinary upload failed:", error);
+      if (localFilePath && fs.existsSync(localFilePath)) {
+        try {
+          fs.unlinkSync(localFilePath);
+        } catch (e) {
+          console.error("Failed to clean up temp file:", e);
+        }
+      }
       return null
     }
   }

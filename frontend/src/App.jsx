@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import MobileBottomNav from './components/MobileBottomNav';
@@ -30,6 +30,8 @@ export default function App() {
   const { isAuthenticated } = useAuth();
   const { currentTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isShortsPage = location.pathname.startsWith('/shorts');
 
   const handleOpenUpload = () => {
     if (!isAuthenticated) {
@@ -74,7 +76,7 @@ export default function App() {
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 min-w-0 transition-all duration-300 pb-20 md:pb-6">
+        <main className={`flex-1 min-w-0 transition-all duration-300 ${isShortsPage ? 'pb-16 md:pb-0' : 'pb-20 md:pb-6'}`}>
           <Routes>
             <Route path="/" element={<HomePage onOpenUpload={handleOpenUpload} />} />
             <Route path="/watch/:videoId" element={<WatchPage />} />

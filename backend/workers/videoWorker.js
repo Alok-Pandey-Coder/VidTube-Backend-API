@@ -3,6 +3,7 @@ import { Worker } from 'bullmq';
 import mongoose from 'mongoose';
 import { connection } from '../config/redis.js';
 import { Video } from '../src/models/video.models.js';
+import { User } from '../src/models/user.models.js';
 import { DB_NAME } from '../src/constants.js';
 import os from 'os';
 import path from 'path';
@@ -10,7 +11,7 @@ import fs from 'fs/promises';
 import { getFilePath, saveHlsOutput } from '../services/storage.js';
 import { probeVideo, transcodeTOHls, createPreview, extractAudio } from '../services/ffmpeg.js';
 import { invalidateVideo } from '../src/utils/cache.js';
-import { notifyUser } from '../services/notify.js';
+import { notifyUser, notifySubscribers } from '../services/notify.js';
 import { transcribeAudio, toVtt } from '../services/transcribe.js';
 import { Transcript } from '../src/models/transcript.models.js';
 import { generateInsights } from '../services/llm.js';
@@ -59,6 +60,7 @@ const worker = new Worker(
 
       await Video.findByIdAndUpdate(videoId, {
         status: 'ready',
+        isShort: duration <= 60 || height > width,
         duration,
         hlsKey: `${hlsPrefix}/master.m3u8`,
         ...(previewKey && { previewKey }),
@@ -71,6 +73,26 @@ const worker = new Worker(
         message: `"${video.title}" is ready to watch`,
         data: { videoId: String(videoId) },
       }).catch((e) => console.log('notify failed:', e.message));
+
+      if (video.isPublished !== false) {
+        try {
+          const uploader = await User.findById(video.owner).select('username fullname avatar');
+          const channelName = uploader?.fullname || uploader?.username || 'A channel you follow';
+          await notifySubscribers(video.owner, {
+            type: 'new_video',
+            message: `${channelName} published a new video: "${video.title}"`,
+            data: {
+              videoId: String(videoId),
+              channelId: String(video.owner),
+              channelName,
+              thumbnail: video.thumbnail,
+              title: video.title,
+            },
+          });
+        } catch (err) {
+          console.log('subscriber notify failed:', err.message);
+        }
+      }
 
       // captions: video already playable, isliye yahan ki failure non-fatal
       try {

@@ -89,12 +89,13 @@ app.get('/sitemap.xml', sitemap);
 Sentry.setupExpressErrorHandler(app);
 
 app.use((err, req, res, _next) => {
-  const status = err instanceof ApiError ? err.statusCode : err.name === 'MulterError' ? 400 : 500;
+  const isApiError = err instanceof ApiError;
+  const status = isApiError ? err.statusCode : err.name === 'MulterError' ? 400 : 500;
   if (status >= 500) req.log.error({ err }, 'unhandled error');
 
   res.status(status).json({
     success: false,
-    message: status >= 500 ? 'Internal server error' : err.message,
+    message: isApiError ? err.message : status >= 500 ? 'Internal server error' : err.message,
     ...(process.env.NODE_ENV !== 'production' && status >= 500 && { stack: err.stack }),
   });
 });
