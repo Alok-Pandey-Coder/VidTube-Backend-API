@@ -75,7 +75,7 @@ export default function UploadShortModal({ isOpen, onClose, onSuccess }) {
         formData.append('tags', JSON.stringify(tags));
       }
 
-      const res = await shortsApi.publishShort(formData, (percent) => {
+      const res = await shortsApi.upload(formData, (percent) => {
         setProgress(percent);
       });
 
