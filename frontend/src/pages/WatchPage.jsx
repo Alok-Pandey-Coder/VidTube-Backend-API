@@ -481,6 +481,21 @@ export default function WatchPage() {
           {/* Comments */}
           <CommentSection videoId={videoId} videoOwnerId={video?.owner?._id || video?.owner} />
 
+          {/* More Videos — below comments on mobile (sidebar handles desktop) */}
+          {(relatedLoading || recommended.length > 0) && (
+            <div className="lg:hidden pt-2 pb-4 space-y-3">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-zinc-400 px-1">
+                More Videos
+              </h3>
+              <div className="space-y-2.5">
+                {relatedLoading && <UpNextSkeleton count={4} />}
+                {!relatedLoading && recommended.map((item) => (
+                  <VideoCard key={item._id || item.id} video={item} layout="horizontal" />
+                ))}
+              </div>
+            </div>
+          )}
+
           <SaveToPlaylistModal 
             videoId={videoId} 
             videoTitle={video?.title} 
