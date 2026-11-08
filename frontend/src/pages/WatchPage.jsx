@@ -24,6 +24,7 @@ import VideoCard from '../components/VideoCard';
 import { formatViews, timeAgo, formatDuration } from '../utils/formatters';
 import TranscriptPanel from '../components/TranscriptPanel';
 import usePageTitle from '../hooks/usePageTitle';
+import WatchSkeleton, { UpNextSkeleton } from '../components/WatchSkeleton';
 
 const THEATER_KEY = 'vidtube_theater';
 
@@ -35,6 +36,7 @@ export default function WatchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [recommended, setRecommended] = useState([]);
+  const [relatedLoading, setRelatedLoading] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
@@ -112,12 +114,16 @@ export default function WatchPage() {
   useEffect(() => {
     let cancelled = false;
     setRecommended([]);
+    setRelatedLoading(true);
     videoApi
       .getRelated(videoId, 10)
       .then((res) => {
         if (!cancelled) setRecommended(res.data || []);
       })
-      .catch(() => { });
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setRelatedLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -195,13 +201,7 @@ export default function WatchPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
+  if (loading) return <WatchSkeleton />;
 
   if (error || !video) {
     return (
@@ -499,6 +499,7 @@ export default function WatchPage() {
             Up Next
           </h3>
           <div className="space-y-2.5">
+            {relatedLoading && <UpNextSkeleton />}
             {recommended.map((item) => (
               <VideoCard key={item._id || item.id} video={item} layout="horizontal" />
             ))}
