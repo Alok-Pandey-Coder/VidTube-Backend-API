@@ -7,6 +7,8 @@ import pinoHttp from 'pino-http';
 import * as Sentry from '@sentry/node';
 import { logger } from './utils/logger.js';
 import { ApiError } from './utils/ApiError.js';
+import { sharePage, robots, sitemap } from './controllers/share.controller.js';
+
 
 const app = express();
 app.set('trust proxy', 1);
@@ -66,6 +68,7 @@ import subscriptionRouter from './routes/subscription.routes.js';
 import likeRouter from './routes/like.routes.js';
 import WatchLaterRouter from './routes/watchLater.routes.js';
 import notificationRouter from './routes/notification.route.js';
+import shortRouter from './routes/short.routes.js';
 
 app.use('/api/v1/healthcheck', healthcheckRouter);
 app.use('/api/v1/users', userRouter);
@@ -78,6 +81,10 @@ app.use('/api/v1/subscriptions', subscriptionRouter);
 app.use('/api/v1/likes', likeRouter);
 app.use('/api/v1/watch-later', WatchLaterRouter);
 app.use('/api/v1/notifications', notificationRouter);
+app.use('/api/v1/shorts', shortRouter);
+app.get('/share/watch/:videoId', sharePage);
+app.get('/robots.txt', robots);
+app.get('/sitemap.xml', sitemap);
 
 Sentry.setupExpressErrorHandler(app);
 

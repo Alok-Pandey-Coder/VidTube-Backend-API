@@ -50,6 +50,11 @@ const videoSchema = new Schema(
     duration: {
       type: Number,
     },
+    isShort: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     isPublished: {
       type: Boolean,
       default: true,

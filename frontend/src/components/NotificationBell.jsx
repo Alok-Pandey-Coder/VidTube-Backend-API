@@ -6,6 +6,7 @@ import { timeAgo } from '../utils/formatters';
 
 const linkFor = (n) => {
   if (n.type === 'video_failed') return '/dashboard';
+  if (n.type === 'new_subscriber' && n.data?.username) return `/c/${n.data.username}`;
   if (n.data?.videoId) return `/watch/${n.data.videoId}`;
   return '/';
 };

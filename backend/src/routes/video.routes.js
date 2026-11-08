@@ -10,7 +10,8 @@ import {
     getSearchSuggestions,
     registerView, retryProcessing,
     getRelatedVideos,
-    getTranscript
+    getTranscript,
+    getShortsFeed
 } from "../controllers/video.controller.js"
 import {optionalVerifyJWT, verifyJWT} from "../middlewares/auth.middleware.js"
 import {upload} from "../middlewares/multer.middlewares.js"
@@ -37,6 +38,7 @@ router
     );
 
 router.route("/suggest").get(getSearchSuggestions);
+router.route("/feed/shorts").get(optionalVerifyJWT, getShortsFeed);
 router
     .route("/:videoId")
     .get(optionalVerifyJWT,getVideoById)

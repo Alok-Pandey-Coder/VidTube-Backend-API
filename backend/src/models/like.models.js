@@ -10,7 +10,7 @@ const likeSchema = new Schema(
     onModel: {
       type: String,
       required: true,
-      enum: ["Video", "Comment", "Tweet"]
+      enum: ["Video", "Comment", "Tweet", "Short"]
     },
     likedBy: {
       type: Schema.Types.ObjectId,

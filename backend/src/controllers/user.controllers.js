@@ -276,11 +276,13 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Username is required")
   }
 
+  const cleanUsername = username.trim().replace(/^@/, '').toLowerCase();
+
   const channel = await User.aggregate(
     [
       {
         $match: {
-          username: username?.toLowerCase()
+          username: cleanUsername
         }
       },
       {

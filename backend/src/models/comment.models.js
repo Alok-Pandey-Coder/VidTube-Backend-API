@@ -1,20 +1,42 @@
-import mongoose, {Schema} from "mongoose";
+import mongoose, { Schema } from "mongoose";
 
 const commentSchema = new Schema(
   {
     content: {
       type: String,
       required: true,
+      trim: true,
     },
     video: {
       type: Schema.Types.ObjectId,
-      ref: "Video"
+      refPath: "onModel",
+      required: true,
+      index: true,
+    },
+    onModel: {
+      type: String,
+      enum: ["Video", "Short"],
+      default: "Video",
     },
     owner: {
       type: Schema.Types.ObjectId,
-      ref: "User"
-    }
-  },{timestamps: true}
-)
+      ref: "User",
+      required: true,
+    },
+    parentId: {
+      type: Schema.Types.ObjectId,
+      ref: "Comment",
+      default: null,
+      index: true,
+    },
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { timestamps: true }
+);
 
-export const Comment = mongoose.model("Comment", commentSchema)
+commentSchema.index({ video: 1, parentId: 1, isPinned: -1, createdAt: -1 });
+
+export const Comment = mongoose.model("Comment", commentSchema);

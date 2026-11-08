@@ -16,6 +16,8 @@ import { WatchProgress } from '../models/watchProgress.models.js';
 import { WatchLater } from '../models/watchLater.models.js';
 import { VideoDailyStat } from '../models/videoDailyStat.models.js';
 import {Transcript} from '../models/transcript.models.js'
+import { Comment } from '../models/comment.models.js';
+import { notifySubscribers } from '../../services/notify.js';
 
 //Helper function ------
 const SORTABLE = ['createdAt', 'views', 'duration'];
@@ -254,6 +256,7 @@ const publishAVideo = asyncHandler(async (req, res) => {
       storageProvider: 'local', // CHANGE 3
       status: 'uploaded', // CHANGE 3
       thumbnail: uploadedThumbnail?.url,
+      isShort: Boolean(req.body.isShort === 'true' || req.body.isShort === true) || Boolean(title?.toLowerCase().includes('#shorts')),
       owner: req.user._id,
     });
 
@@ -721,4 +724,63 @@ const getTranscript = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, t || { language: null, segments: [] }, 'Transcript fetched'));
 });
 
-export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing, getRelatedVideos, getTranscript};
+const getShortsFeed = asyncHandler(async (req, res) => {
+  const currentUserId = req.user?._id;
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 12, 1), 50);
+
+  const matchCriteria = {
+    isPublished: true,
+    status: { $nin: ['uploaded', 'processing', 'failed'] },
+    $or: [
+      { isShort: true },
+      { duration: { $lte: 180 } },
+      { title: { $regex: '#shorts', $options: 'i' } },
+    ],
+  };
+
+  let videos = await Video.find(matchCriteria)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('owner', 'username fullname avatar')
+    .lean();
+
+  if (videos.length < 3) {
+    const existingIds = videos.map((v) => v._id);
+    const fallback = await Video.find({
+      isPublished: true,
+      status: { $nin: ['uploaded', 'processing', 'failed'] },
+      _id: { $nin: existingIds },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit - videos.length)
+      .populate('owner', 'username fullname avatar')
+      .lean();
+    videos = [...videos, ...fallback];
+  }
+
+  const enriched = await Promise.all(
+    videos.map(async (v) => {
+      const videoId = v._id;
+      const ownerId = v.owner?._id;
+
+      const [likesCount, commentsCount, isLikedDoc, isSubDoc] = await Promise.all([
+        Like.countDocuments({ target: videoId, onModel: 'Video' }),
+        Comment.countDocuments({ video: videoId, parentId: null }),
+        currentUserId ? Like.exists({ target: videoId, likedBy: currentUserId }) : null,
+        currentUserId && ownerId ? Subscription.exists({ subscriber: currentUserId, channel: ownerId }) : null,
+      ]);
+
+      return {
+        ...v,
+        likesCount,
+        commentsCount,
+        isLiked: Boolean(isLikedDoc),
+        isSubscribed: Boolean(isSubDoc),
+      };
+    })
+  );
+
+  return res.status(200).json(new ApiResponse(200, enriched, 'Shorts feed fetched successfully'));
+});
+
+export { getAllVideos, publishAVideo, getVideoById, updateVideo, deleteVideo, togglePublishStatus, saveProgress, getWatchHistory, getSearchSuggestions, registerView , retryProcessing, getRelatedVideos, getTranscript, getShortsFeed };
