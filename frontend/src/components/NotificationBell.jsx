@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell } from 'lucide-react';
+import { Bell, Tv, Film, CheckCheck } from 'lucide-react';
 import useNotifications from '../hooks/useNotification.js';
 import { timeAgo } from '../utils/formatters';
 
 const linkFor = (n) => {
   if (n.type === 'video_failed') return '/dashboard';
+  if (n.type === 'new_subscriber' && n.data?.username) return `/c/${n.data.username}`;
   if (n.data?.videoId) return `/watch/${n.data.videoId}`;
   return '/';
 };
@@ -47,20 +48,32 @@ export default function NotificationBell() {
       >
         <Bell className="w-5 h-5" />
         {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-600 text-[10px] font-bold text-white flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-600 text-[10px] font-bold text-white flex items-center justify-center animate-pulse">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto rounded-2xl bg-zinc-900 border border-zinc-800 shadow-xl z-50">
-          <div className="px-4 py-3 border-b border-zinc-800 text-sm font-semibold text-white">
-            Notifications
+        <div className="absolute right-0 top-full mt-2 w-88 max-h-[30rem] overflow-y-auto rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl z-50 divide-y divide-zinc-800/70">
+          <div className="flex items-center justify-between px-4 py-3 bg-zinc-900/90 sticky top-0 backdrop-blur z-10">
+            <span className="text-sm font-bold text-white">Notifications</span>
+            {unread > 0 && (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="text-xs text-red-400 hover:text-red-300 font-semibold flex items-center gap-1"
+              >
+                <CheckCheck className="w-3.5 h-3.5" /> Mark all read
+              </button>
+            )}
           </div>
 
           {items.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-zinc-500">No notifications yet</p>
+            <div className="py-12 text-center space-y-2">
+              <Bell className="w-8 h-8 text-zinc-600 mx-auto" />
+              <p className="text-xs text-zinc-500">Your notifications will appear here</p>
+            </div>
           ) : (
             <ul>
               {items.map((n) => (
@@ -68,8 +81,8 @@ export default function NotificationBell() {
                   <Link
                     to={linkFor(n)}
                     onClick={() => setOpen(false)}
-                    className={`flex gap-3 px-4 py-3 hover:bg-zinc-800 transition ${
-                      n.read ? '' : 'bg-zinc-800/50'
+                    className={`flex items-start gap-3 px-4 py-3 hover:bg-zinc-800/80 transition ${
+                      n.read ? 'opacity-80' : 'bg-zinc-800/40'
                     }`}
                   >
                     <span
@@ -77,10 +90,23 @@ export default function NotificationBell() {
                         n.read ? 'bg-transparent' : 'bg-red-500'
                       }`}
                     />
-                    <div className="min-w-0">
-                      <p className="text-sm text-zinc-200 line-clamp-2">{n.message}</p>
-                      <p className="mt-0.5 text-xs text-zinc-500">{timeAgo(n.createdAt)}</p>
+
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <p className="text-xs text-zinc-200 line-clamp-2 leading-relaxed">
+                        {n.message}
+                      </p>
+                      <p className="text-[10px] text-zinc-500 font-mono">
+                        {timeAgo(n.createdAt)}
+                      </p>
                     </div>
+
+                    {n.data?.thumbnail && (
+                      <img
+                        src={n.data.thumbnail}
+                        alt="video preview"
+                        className="w-12 aspect-video rounded-md object-cover border border-zinc-800 shrink-0"
+                      />
+                    )}
                   </Link>
                 </li>
               ))}

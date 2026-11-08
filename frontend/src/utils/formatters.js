@@ -9,6 +9,13 @@ export function formatViews(views = 0) {
   return `${num} ${num === 1 ? 'view' : 'views'}`;
 }
 
+export function formatCompactNumber(num = 0) {
+  const n = Number(num) || 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+}
+
 export function formatDuration(seconds = 0) {
   const total = Math.floor(Number(seconds) || 0);
   const hrs = Math.floor(total / 3600);
